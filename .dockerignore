@@ -1,10 +1,10 @@
-# イメージに入れる必要がないもの。
-# ここに書いたものは COPY . . の対象から外れる。
+# イメージに含める必要がないもの。COPY . . の対象から除外される。
 
 .git/
 .github/
 .direnv/
 .envrc.local
+.work/
 result
 result-*
 *.swp
