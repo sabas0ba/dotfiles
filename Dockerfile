@@ -25,12 +25,18 @@ FROM nixos/nix:${NIX_VERSION}
 # Docker のデフォルト seccomp プロファイルと Nix のサンドボックスが噛み合わず
 # ビルドが落ちることがあるため、コンテナ内では sandbox を切っておく
 # (どのみち依存はすべて cache.nixos.org からのバイナリで、ここでは何もビルドしない)。
+#
+# flake-registry を空にしているのは、この repo の flake が入力をすべて自前で固定して
+# いてグローバルレジストリを引く必要が無いため。空にしないと、ネットワークの無い環境で
+# nix を叩くたびに channels.nixos.org への取得失敗が出力される。
+# 代わりに `nixpkgs` という名前は下でこの repo が固定した nixpkgs に向ける。
 RUN mkdir -p /etc/nix \
   && printf '%s\n' \
   'experimental-features = nix-command flakes' \
   'sandbox = false' \
   'filter-syscalls = false' \
   'max-jobs = auto' \
+  'flake-registry = ' \
   >> /etc/nix/nix.conf
 
 # 実体化した開発シェルの置き場所。entrypoint と合わせる。
@@ -48,8 +54,15 @@ COPY nix ./nix
 # --- 2) 開発シェルを profile として実体化する -------------------------------
 # `nix develop --profile` は devShell の環境を profile に書き出す。
 # profile は GC ルートなので、以降この閉包は消えない。
+#
+# あわせて `nixpkgs` という名前を、この repo が flake.lock で固定した nixpkgs 自身に
+# 向けておく。コンテナの中で `nix shell nixpkgs#jq` のような使い方をしても、開発シェルと
+# 同じ nixpkgs が使われ、しかもネットワークを引かない。
+#
 # 最後の rm は取得済み tarball の展開キャッシュを捨てているだけで、store には触らない。
 RUN nix develop --profile "$DOTFILES_PROFILE" --command true \
+  && nix registry add nixpkgs \
+  "path:$(nix eval --raw --impure --expr '(builtins.getFlake "/workspace").inputs.nixpkgs.outPath')" \
   && rm -rf /root/.cache/nix
 
 # --- 3) dotfiles 本体をコピーする ------------------------------------------

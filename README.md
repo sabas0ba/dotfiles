@@ -85,8 +85,17 @@ docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
 docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```
 
-ビルド時に開発シェルを Nix の profile として実体化しているので、起動は速く、
-ネットワークが無くても中に入れる。
+ビルド時に開発シェルを Nix の profile として実体化しているので、起動は速く
+(1 秒程度)、ネットワークが無くても中に入れる。イメージは nixpkgs のソースごと
+抱えているため、`--network none` のまま `make check` (= `nix flake check`) まで通る。
+
+コンテナの中では `nixpkgs` という名前も、この repo が `flake.lock` で固定した
+nixpkgs に向けてある。したがって次もオフラインで動き、開発シェルと同じ nixpkgs
+から解決される。
+
+```bash
+nix shell nixpkgs#jq
+```
 
 ## 再現性について
 
