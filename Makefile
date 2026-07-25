@@ -77,6 +77,10 @@ stow: ## dotfiles をホームディレクトリに配置する
 	@echo "先に make stow-dry で対象を確認すること。"
 	stow --verbose --target="$(HOME)" $(STOW_PACKAGE)
 
+.PHONY: unstow
+unstow: ## 配置した symlink を削除する (配置前の状態に戻す)
+	stow --delete --verbose --target="$(HOME)" $(STOW_PACKAGE)
+
 # --- コンテナ側の環境 -------------------------------------------------------
 
 .PHONY: docker-build
