@@ -1,12 +1,10 @@
 {
-  description = "dotfiles: Nix + direnv で閉じた再現性のある開発環境";
+  description = "dotfiles: Nix と direnv による再現性のある開発環境";
 
   inputs = {
-    # nixpkgs は「必ず」リビジョン固定で参照する。
-    # ブランチ名 (nixos-26.05 など) で参照すると flake.lock が無い環境で
-    # 取得結果がブレるため、rev をここに直書きしている。
-    # 更新は `make update` (= nix flake update) ではなく `make bump REV=<rev>` で行い、
-    # flake.lock も同じコミットで更新すること。
+    # nixpkgs はリビジョンで固定する。ブランチ名 (nixos-26.05 等) による参照は
+    # flake.lock が無い環境で取得結果が変動するため使用しない。
+    # 更新は `make bump REV=<rev>` で行い、flake.lock を同一のコミットに含める。
     nixpkgs.url = "github:NixOS/nixpkgs/597283ad8aa0b331c788e97c4c262d58877074ef"; # nixos-26.05
   };
 
@@ -34,13 +32,13 @@
         );
     in
     {
-      # `nix develop` / direnv の `use flake` が使う開発シェル。
+      # `nix develop` および direnv の `use flake` が使用する開発シェル。
       devShells = forAllSystems (pkgs: {
         default = import ./nix/devshell.nix { inherit pkgs; };
       });
 
-      # ツール一式を 1 つの profile にまとめたもの。
-      # Dockerfile やホストへの `nix profile install` から使える。
+      # ツール一式を 1 つの profile にまとめたもの。Dockerfile およびホストへの
+      # `nix profile install` から使用する。
       packages = forAllSystems (pkgs: {
         default = pkgs.buildEnv {
           name = "dotfiles-toolchain";
@@ -48,7 +46,7 @@
         };
       });
 
-      # `nix flake check` / `make check` で走る検査。
+      # `nix flake check` および `make check` が実行する検査。
       checks = forAllSystems (
         pkgs:
         import ./nix/checks.nix {
@@ -57,7 +55,7 @@
         }
       );
 
-      # `nix fmt` で使うフォーマッタ。
+      # `nix fmt` が使用するフォーマッタ。
       formatter = forAllSystems (pkgs: pkgs.nixfmt);
     };
 }

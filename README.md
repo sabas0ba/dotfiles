@@ -1,25 +1,37 @@
 # dotfiles
 
-Nix と direnv で閉じた、再現性のある開発環境。同じ定義からコンテナイメージも作れる。
+Nix と direnv による再現性のある開発環境、および同一の定義から構築するコンテナ環境。
 
-環境に入っているツールの一覧は [`nix/packages.nix`](nix/packages.nix) の 1 か所だけで
-定義していて、ホストの開発シェル・`nix build` の profile・Docker イメージの
-3 つすべてがそこを参照する。したがって「手元とコンテナで入っているものが違う」
-という状態が原理的に起きない。
+環境に含まれるツールの一覧は [`nix/packages.nix`](nix/packages.nix) の 1 か所のみで
+定義し、ホストの開発シェル、`nix build` の profile、Docker イメージの 3 つすべてが
+これを参照する。したがってホストとコンテナで内容が乖離しない。
 
-## 必要なもの
+## 前提
 
-- [Nix](https://nixos.org/download/) (flakes を有効にすること)
-- [direnv](https://direnv.net/) (任意。あると `cd` するだけで環境に入れる)
-- Docker (任意。コンテナ環境を使う場合のみ)
+- [Nix](https://nixos.org/download/) (flakes を有効化すること)
+- [direnv](https://direnv.net/) (任意。導入すると `cd` のみで環境に入る)
+- Docker (任意。コンテナ環境を使用する場合のみ)
 
-Nix のインストール:
+### Nix の導入
+
+配布物をバージョン固定で取得し、チェックサムを検証してから展開する。インストーラを
+検証せずに直接実行する方式 (`curl ... | sh`) は用いない。
 
 ```bash
-curl -L https://nixos.org/nix/install | sh -s -- --daemon
+NIX_VERSION=2.35.1
+BASE="https://releases.nixos.org/nix/nix-${NIX_VERSION}"
+TARBALL="nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz"
+
+curl -LO "${BASE}/${TARBALL}"
+curl -L "${BASE}/${TARBALL}.sha256" | tr -d '\n' | sed "s|$|  ${TARBALL}|" | sha256sum -c -
+tar -xf "${TARBALL}"
+"nix-${NIX_VERSION}-$(uname -m)-linux/install" --daemon
 ```
 
-flakes を有効にする (`~/.config/nix/nix.conf` か `/etc/nix/nix.conf`):
+x86_64-linux における sha256 は
+`c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3` である。
+
+flakes を有効化する (`~/.config/nix/nix.conf` または `/etc/nix/nix.conf`)。
 
 ```
 experimental-features = nix-command flakes
@@ -28,56 +40,67 @@ experimental-features = nix-command flakes
 ## セットアップ
 
 ```bash
-git clone https://github.com/sabas0ba/dotfiles.git
-cd dotfiles
+git clone https://github.com/sabas0ba/dotfiles.git ~/repos/dotfiles
+cd ~/repos/dotfiles
 
-# 環境に入る (flake.lock は同梱済みなので、誰の手元でも同じものが入る)
+# 環境に入る (flake.lock を同梱しているため、どの環境でも同一の内容となる)
 nix develop
-scripts/check-env.sh   # 揃っているか確認
+scripts/check-env.sh   # 構成の確認
 ```
 
-### direnv のセットアップ (推奨)
+### direnv のセットアップ
 
-`cd` しただけで環境に入り、抜けると元に戻るようになる。
+`cd` により環境に入り、ディレクトリを離れると元に戻る。
 
 ```bash
-# シェルに direnv のフックを入れる (bash の例。zsh なら zshrc に zsh 用の行を)
+# シェルに direnv のフックを追加する (bash の例)
 echo 'eval "$(direnv hook bash)"' >> ~/.bashrc
 
-# nix-direnv を有効にする (flake の評価結果をキャッシュして cd を速くする)
+# nix-direnv を有効化する (flake の評価結果をキャッシュする)
 mkdir -p ~/.config/direnv
 echo 'source $HOME/.nix-profile/share/nix-direnv/direnvrc' >> ~/.config/direnv/direnvrc
 
-# このリポジトリの .envrc を許可する
-cd /path/to/dotfiles
+# 本リポジトリの .envrc を許可する
+cd ~/repos/dotfiles
 direnv allow
 ```
 
-マシン固有の設定 (トークンなど) は `.envrc.local` に置く。git 管理外で、
-`.envrc` から自動で読み込まれる。
+マシン固有の設定は `.envrc.local` に置く。git 管理外であり、`.envrc` から読み込まれる。
 
-## 使い方
-
-```bash
-make help          # 使えるコマンドの一覧
-make check         # 検査ぜんぶ (整形・lint・環境のスモークテスト)
-make fmt           # Nix とシェルスクリプトを整形
-make lint          # 静的解析だけ
-make shell         # 開発シェルに入る (direnv を使わない場合)
-```
-
-## コンテナで使う
-
-ホストと同じ環境をコンテナの中に作る。Dockerfile はツール一覧を持たず、
-この repo の `flake.nix` をそのまま評価するので、中身は必ずホストと一致する。
+## 操作
 
 ```bash
-make docker-build   # イメージをビルド
-make docker-shell   # 中の開発シェルに入る (カレントディレクトリをマウント)
-make docker-check   # 中でスモークテストを走らせる
+make help          # 利用可能な操作の一覧
+make check         # すべての検査 (整形・静的解析・環境のスモークテスト)
+make fmt           # Nix およびシェルスクリプトの整形
+make lint          # 静的解析のみ
+make shell         # 開発シェルに入る (direnv 未使用時)
 ```
 
-直接叩く場合:
+## dotfiles の配置
+
+`home/` 以下がホームディレクトリの構造に対応する (例: `home/.claude/CLAUDE.md` は
+`~/.claude/CLAUDE.md` に配置される)。配置には GNU stow を使用する。
+
+既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
+
+```bash
+make stow-dry   # 配置内容の確認 (実際には配置しない)
+make stow       # 配置の実行
+```
+
+## コンテナ環境
+
+ホストと同一の環境をコンテナ内に構築する。Dockerfile はツールの一覧を持たず、本
+リポジトリの `flake.nix` を評価するため、内容はホストと一致する。
+
+```bash
+make docker-build   # イメージの構築
+make docker-shell   # コンテナ内の開発シェルに入る (カレントディレクトリをマウント)
+make docker-check   # コンテナ内でのスモークテスト
+```
+
+直接実行する場合:
 
 ```bash
 docker build -t dotfiles-dev .
@@ -85,30 +108,36 @@ docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
 docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```
 
-ビルド時に開発シェルを Nix の profile として実体化しているので、起動は速く
-(1 秒程度)、ネットワークが無くても中に入れる。イメージは nixpkgs のソースごと
-抱えているため、`--network none` のまま `make check` (= `nix flake check`) まで通る。
+ビルド時に開発シェルを Nix の profile として実体化しているため、起動は約 1 秒であり、
+ネットワークを必要としない。イメージは nixpkgs のソースを含むため、`--network none`
+のまま `make check` (`nix flake check`) が実行できる。
 
-コンテナの中では `nixpkgs` という名前も、この repo が `flake.lock` で固定した
-nixpkgs に向けてある。したがって次もオフラインで動き、開発シェルと同じ nixpkgs
-から解決される。
+コンテナ内では名前 `nixpkgs` も `flake.lock` で固定した nixpkgs に解決される。以下は
+ネットワーク無しで動作し、開発シェルと同一の nixpkgs を参照する。
 
 ```bash
 nix shell nixpkgs#jq
 ```
 
-## 再現性について
+## CI
 
-固定しているもの:
+`.github/workflows/ci.yml` で、イメージを構築し、`--network none` のコンテナ内で
+`make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査は
+コンテナ内で行う。
 
-| 対象 | 固定方法 |
-| --- | --- |
-| nixpkgs | `flake.nix` の `nixpkgs.url` に 40 桁の rev を直書き + `flake.lock` |
-| ツール一式 | `nix/packages.nix` (上の nixpkgs から解決) |
-| ベースイメージ | `Dockerfile` の `ARG NIX_VERSION` |
-| ロケール | 開発シェルで `LC_ALL=C.UTF-8` |
+## 再現性
 
-nixpkgs を更新するとき:
+外部の成果物はすべて一意に固定する。
+
+| 対象 | 固定方法 | 定義箇所 |
+| --- | --- | --- |
+| nixpkgs | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
+| ツール一式 | 上記 nixpkgs から解決 | `nix/packages.nix` |
+| ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
+| GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
+| ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
+
+nixpkgs を更新する場合:
 
 ```bash
 make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)
@@ -116,16 +145,23 @@ make check
 git add flake.nix flake.lock && git commit -m "chore: bump nixpkgs"
 ```
 
+ベースイメージを更新する場合は、`Dockerfile` の `NIX_VERSION` と `NIX_IMAGE_DIGEST`
+を同時に変更する。ダイジェストは
+`docker buildx imagetools inspect nixos/nix:<version>` で取得する。
+
 ## 構成
 
 ```
-flake.nix              入力 (nixpkgs の rev 固定) と出力の定義
-nix/packages.nix       ツールの一覧 (単一情報源)
-nix/devshell.nix       開発シェルの形
-nix/checks.nix         nix flake check が走らせる検査
-.envrc                 direnv の設定
-Dockerfile             同じ flake からコンテナを作る
-Makefile               操作の入り口
-scripts/               ヘルパースクリプト
-CLAUDE.md              Claude Code 向けの作業指示
+flake.nix                入力 (nixpkgs の rev 固定) と出力の定義
+flake.lock               入力の解決結果
+nix/packages.nix         ツールの一覧 (単一情報源)
+nix/devshell.nix         開発シェルの定義
+nix/checks.nix           nix flake check が実行する検査
+.envrc                   direnv の設定
+Dockerfile               同一の flake からコンテナを構築する
+Makefile                 操作の入り口
+scripts/                 ヘルパースクリプト
+home/                    ホームディレクトリへ配置する dotfiles (stow パッケージ)
+.github/workflows/ci.yml CI 定義
+CLAUDE.md                Claude Code に対する本リポジトリ固有の指示
 ```

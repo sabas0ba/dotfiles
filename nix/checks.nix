@@ -1,11 +1,10 @@
-# `nix flake check` (= `make check`) が走らせる検査。
+# `nix flake check` (`make check`) が実行する検査。
 #
-# CI でもローカルでも Docker の中でも、まったく同じ derivation が走る。
+# ローカル、CI、コンテナのいずれでも同一の derivation が実行される。
 { pkgs, src }:
 
 let
-  # 検査ごとに使い回す薄いヘルパー。
-  # 成功したら $out に空ファイルを作るだけの derivation を作る。
+  # 各検査で共通に使用するヘルパー。検査が成功した場合のみ $out を生成する。
   mkCheck =
     name: deps: script:
     pkgs.runCommandLocal "check-${name}" { nativeBuildInputs = deps; } ''
@@ -15,17 +14,17 @@ let
     '';
 in
 {
-  # Nix コードが nixfmt で整形済みかどうか。
+  # Nix コードが nixfmt で整形済みであること。
   nixfmt = mkCheck "nixfmt" [ pkgs.nixfmt ] ''
     nixfmt --check .
   '';
 
-  # Nix コードの lint。
+  # Nix コードの静的解析。
   statix = mkCheck "statix" [ pkgs.statix ] ''
     statix check .
   '';
 
-  # 使われていない let 束縛・引数の検出。
+  # 未使用の let 束縛および関数引数の検出。
   deadnix = mkCheck "deadnix" [ pkgs.deadnix ] ''
     deadnix --fail .
   '';
@@ -36,7 +35,7 @@ in
     shellcheck --shell=bash .envrc
   '';
 
-  # シェルスクリプトが shfmt で整形済みかどうか (インデント 2 / case もインデント)。
+  # シェルスクリプトが shfmt で整形済みであること (インデント 2、case もインデント)。
   shfmt = mkCheck "shfmt" [ pkgs.shfmt ] ''
     shfmt --diff --indent 2 --case-indent scripts/*.sh
   '';

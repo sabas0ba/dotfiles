@@ -3,23 +3,22 @@
 # コンテナの ENTRYPOINT。
 #
 # イメージのビルド時に `nix develop --profile "$DOTFILES_PROFILE"` で開発シェルを
-# profile として実体化してあるので、ここでは flake を評価し直さずにその profile へ
-# 入るだけでよい。結果としてコンテナの起動はオフラインでも一瞬で終わり、
-# 中身はホストの `nix develop` とまったく同じ閉包になる。
+# profile として実体化しているため、本スクリプトでは flake を再評価せずその profile に
+# 入る。実行時のネットワークを必要とせず、起動が速い。
 #
-# ベースイメージ (nixos/nix) に bash がある保証を置きたくないので POSIX sh で書く。
+# ベースイメージ (nixos/nix) における bash の存在を前提としないため POSIX sh で記述する。
 set -eu
 
 profile="${DOTFILES_PROFILE:-/nix/var/nix/profiles/dotfiles-dev}"
 
 if [ ! -e "$profile" ]; then
   echo "開発 profile が見つかりません: $profile" >&2
-  echo "イメージのビルドが途中で失敗している可能性があります。" >&2
+  echo "イメージのビルドが失敗している可能性があります。" >&2
   exit 1
 fi
 
 if [ "$#" -eq 0 ]; then
-  # 引数なしなら対話シェルに入る。
+  # 引数が無い場合は対話シェルに入る。
   exec nix develop "$profile" --command bash
 fi
 
