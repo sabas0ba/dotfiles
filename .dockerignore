@@ -1,0 +1,11 @@
+# イメージに入れる必要がないもの。
+# ここに書いたものは COPY . . の対象から外れる。
+
+.git/
+.github/
+.direnv/
+.envrc.local
+result
+result-*
+*.swp
+.DS_Store

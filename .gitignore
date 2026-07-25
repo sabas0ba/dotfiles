@@ -1,0 +1,14 @@
+# direnv / nix-direnv が作るキャッシュ
+/.direnv/
+.direnv/
+
+# マシン固有・秘密情報を含みうる設定 (.envrc から読む)
+.envrc.local
+
+# nix build の成果物 symlink
+result
+result-*
+
+# エディタ・OS が作るゴミ
+*.swp
+.DS_Store
