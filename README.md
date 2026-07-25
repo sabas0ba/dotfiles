@@ -31,11 +31,7 @@ experimental-features = nix-command flakes
 git clone https://github.com/sabas0ba/dotfiles.git
 cd dotfiles
 
-# 初回だけ: nixpkgs を固定した flake.lock を生成してコミットする
-make lock
-git add flake.lock && git commit -m "chore: add flake.lock"
-
-# 環境に入る
+# 環境に入る (flake.lock は同梱済みなので、誰の手元でも同じものが入る)
 nix develop
 scripts/check-env.sh   # 揃っているか確認
 ```
