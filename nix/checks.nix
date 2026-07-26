@@ -15,8 +15,9 @@ let
 in
 {
   # Nix コードが nixfmt で整形済みであること。
-  nixfmt = mkCheck "nixfmt" [ pkgs.nixfmt ] ''
-    nixfmt --check .
+  # nixfmt にディレクトリを渡す方式は非推奨のため、ファイルを列挙する。
+  nixfmt = mkCheck "nixfmt" [ pkgs.nixfmt pkgs.findutils ] ''
+    find . -type f -name '*.nix' -exec nixfmt --check {} +
   '';
 
   # Nix コードの静的解析。

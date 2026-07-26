@@ -91,6 +91,29 @@
       );
 
       # `nix fmt` が使用するフォーマッタ。
-      formatter = forAllSystems (pkgs: pkgs.nixfmt);
+      #
+      # nixfmt を直接指定してはならない。`nix fmt` は引数無しでフォーマッタを起動する
+      # ことがあり、その場合 nixfmt は標準入力を読もうとして失敗する。対象が
+      # 与えられなかったときに対象を補うラッパを噛ませる。
+      formatter = forAllSystems (
+        pkgs:
+        pkgs.writeShellApplication {
+          name = "dotfiles-fmt";
+          runtimeInputs = [
+            pkgs.nixfmt
+            pkgs.findutils
+          ];
+          text = ''
+            if [ "$#" -gt 0 ]; then
+              nixfmt "$@"
+              exit 0
+            fi
+
+            # 対象が与えられない場合はリポジトリ配下の *.nix を対象とする。
+            # nixfmt にディレクトリを渡す方式は非推奨のため、ファイルを列挙する。
+            find . -type f -name '*.nix' -exec nixfmt {} +
+          '';
+        }
+      );
     };
 }
