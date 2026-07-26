@@ -111,12 +111,16 @@ make hm-switch  # 配置の実行
 指定する必要はない。明示する場合は `make hm-switch HM_TARGET=<name>` とする。マシンを
 追加する場合は `flake.nix` の `homeTargets` にユーザー名と一致する名前で追記する。
 
+ホームディレクトリはユーザー名と `system` から導出する (linux は `/home/<name>`、
+darwin は `/Users/<name>`)。規則から外れる対象のみ `homeDirectory` を明示する。
+したがってマシンを追加する場合、通常はユーザー名と `system` の指定だけで足りる。
+
 現在定義してある対象は以下のとおり。
 
 | 対象 | ホームディレクトリ | 用途 |
 | --- | --- | --- |
-| `sabas0ba` | `/home/sabas0ba` | 個人環境 |
-| `root` | `/root` | Claude Code のリモート実行環境 (root で動作する) |
+| `sabas0ba` | `/home/sabas0ba` (導出) | 個人環境 |
+| `root` | `/root` (明示) | Claude Code のリモート実行環境 (root で動作する) |
 
 Claude Code のリモート実行環境では、`~/.gitconfig` をセッション側が管理しており、
 コミット署名やプロキシ経由の URL 書き換えが設定されている。home-manager が生成するのは

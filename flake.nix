@@ -42,16 +42,20 @@
           )
         );
 
+      # ユーザー名とプラットフォームからホームディレクトリを導出する。
+      # 規則から外れる対象は homeTargets 側で homeDirectory を明示する。
+      defaultHomeDirectory =
+        username: system:
+        if nixpkgs.lib.hasSuffix "darwin" system then "/Users/${username}" else "/home/${username}";
+
       # home-manager の適用対象。マシンを追加する場合はここに追記する。
       # 名前はユーザー名と一致させる。Makefile の HM_TARGET は既定で実行中の
       # ユーザー名 (id -un) を使うため、環境ごとに指定せずに済む。
       homeTargets = {
-        sabas0ba = {
-          system = "x86_64-linux";
-          homeDirectory = "/home/sabas0ba";
-        };
+        sabas0ba.system = "x86_64-linux";
 
-        # Claude Code のリモート実行環境。root で動作し、HOME は /root。
+        # Claude Code のリモート実行環境。root で動作する。
+        # ホームは /home/<name> の規則から外れるため明示する。
         root = {
           system = "x86_64-linux";
           homeDirectory = "/root";
@@ -59,13 +63,12 @@
       };
 
       mkHomeConfiguration =
-        username:
-        {
-          system,
-          homeDirectory,
-        }:
+        username: target:
+        let
+          homeDirectory = target.homeDirectory or (defaultHomeDirectory username target.system);
+        in
         home-manager.lib.homeManagerConfiguration {
-          pkgs = import nixpkgs { inherit system; };
+          pkgs = import nixpkgs { inherit (target) system; };
           modules = [ ./nix/home.nix ];
           extraSpecialArgs = { inherit username homeDirectory; };
         };
