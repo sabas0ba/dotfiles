@@ -6,6 +6,9 @@ Nix と direnv による再現性のある開発環境、および同一の定�
 定義し、ホストの開発シェル、`nix build` の profile、Docker イメージの 3 つすべてが
 これを参照する。したがってホストとコンテナで内容が乖離しない。
 
+本ファイルが本リポジトリの規約の所在である。Claude Code に対する指示 (`CLAUDE.md`)
+も本ファイルを参照する。
+
 ## 前提
 
 - [Nix](https://nixos.org/download/) (flakes を有効化すること)
@@ -77,16 +80,25 @@ make lint          # 静的解析のみ
 make shell         # 開発シェルに入る (direnv 未使用時)
 ```
 
+作業は開発シェルの内部で行う。環境変数 `DOTFILES_ENV` が `nix-develop` であれば
+開発シェル内である。`scripts/check-env.sh` で確認できる。
+
+ツールを開発シェルの外から導入しない。`apt install` / `brew install` /
+`npm install -g` / `pip install --user` 等は再現性を損なう。必要なツールは
+`nix/packages.nix` に追記して取得する。
+
 ## dotfiles の配置
 
 `home/` 以下がホームディレクトリの構造に対応する (例: `home/.claude/CLAUDE.md` は
-`~/.claude/CLAUDE.md` に配置される)。配置には GNU stow を使用する。
+`~/.claude/CLAUDE.md` に配置される)。配置には GNU stow を使用し、コピーではなく
+symlink を張る。したがって配置後の編集はリポジトリの変更として現れる。
 
 既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
 
 ```bash
 make stow-dry   # 配置内容の確認 (実際には配置しない)
 make stow       # 配置の実行
+make unstow     # 配置の取り消し
 ```
 
 ## コンテナ環境
@@ -125,9 +137,87 @@ nix shell nixpkgs#jq
 `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査は
 コンテナ内で行う。
 
+## 開発
+
+### ツールを追加する
+
+1. `nix/packages.nix` にパッケージ名を追記する (グループのコメントに従って配置する)
+2. コマンドとして使用するものは `scripts/check-env.sh` の `required_commands` にも
+   追記する
+3. `make check` が成功することを確認する
+
+`Dockerfile` にツール名を追記しない。定義が重複し、不整合が生じるため。
+
+### dotfiles を追加する
+
+`home/` 以下に、ホームディレクトリからの相対パスで配置する。配置手順は
+[dotfiles の配置](#dotfiles-の配置) を参照する。
+
+### nixpkgs を更新する
+
+`flake.nix` の `nixpkgs.url` はブランチ名ではなく 40 桁の rev で固定してある。更新は
+以下のコマンドで行い、`flake.nix` と `flake.lock` を同一のコミットに含める。
+
+```bash
+make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)
+make check
+```
+
+nixpkgs の更新は独立したコミットとし、他の変更と混在させない。
+
+### ベースイメージを更新する
+
+`Dockerfile` の `NIX_VERSION` と `NIX_IMAGE_DIGEST` を同時に変更する。ダイジェストは
+`docker buildx imagetools inspect nixos/nix:<version>` で取得する。
+
+### Dockerfile を変更する
+
+コンテナはホストと同一の環境である必要がある。イメージの内容を変更する場合、変更先は
+`nix/packages.nix` である。Dockerfile を直接変更してよいのは、レイヤ構成、ベース
+イメージの固定、entrypoint の挙動を変更する場合に限る。
+
+### コーディング規約
+
+- Nix: `nixfmt` (RFC 166 スタイル) で整形する。`statix` および `deadnix` の指摘を
+  残さない
+- シェル: bash または POSIX sh。先頭に `set -euo pipefail` (sh では `set -eu`) を
+  記述する。`shellcheck` を通し、`shfmt --indent 2 --case-indent` で整形する
+- コメント: 実装内容ではなく、その選択の理由を記述する。既存ファイルに合わせて
+  日本語で記述する
+- 整形は手作業ではなく `make fmt` で行う
+
+### コミット
+
+- Conventional Commits (`feat:` / `fix:` / `chore:` / `docs:` / `refactor:` / `ci:`)
+- 1 コミット 1 目的とする。環境の更新と dotfiles の変更を混在させない
+- コミット前に `make check` を実行する
+
+### 検証
+
+以下が成功することを必須とする。
+
+```bash
+make check
+```
+
+`Dockerfile` または `nix/` を変更した場合は、コンテナ側も検証する。
+
+```bash
+make docker-check
+```
+
+### 禁止事項
+
+- 秘密情報 (トークン、鍵、社内ホスト名) のコミット。マシン固有の設定は `.envrc.local`
+  (git 管理外) に置く
+- `flake.lock` の削除、`.gitignore` への追加、および検査を通過させるための検査自体の
+  削除
+- 開発シェルの外部でのツール導入
+- 一時ファイルをリポジトリ外部 (`/tmp` 等) に作成すること。`.work/` を使用する
+
 ## 再現性
 
-外部の成果物はすべて一意に固定する。
+外部の成果物はすべて一意に固定する。タグやブランチ名のみによる参照は固定とみなさない。
 
 | 対象 | 固定方法 | 定義箇所 |
 | --- | --- | --- |
@@ -137,17 +227,8 @@ nix shell nixpkgs#jq
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
 | ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
 
-nixpkgs を更新する場合:
-
-```bash
-make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)
-make check
-git add flake.nix flake.lock && git commit -m "chore: bump nixpkgs"
-```
-
-ベースイメージを更新する場合は、`Dockerfile` の `NIX_VERSION` と `NIX_IMAGE_DIGEST`
-を同時に変更する。ダイジェストは
-`docker buildx imagetools inspect nixos/nix:<version>` で取得する。
+`flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock`
+で生成する。
 
 ## 構成
 
@@ -163,5 +244,6 @@ Makefile                 操作の入り口
 scripts/                 ヘルパースクリプト
 home/                    ホームディレクトリへ配置する dotfiles (stow パッケージ)
 .github/workflows/ci.yml CI 定義
-CLAUDE.md                Claude Code に対する本リポジトリ固有の指示
+CLAUDE.md                Claude Code 向けの補足
+.work/                   作業用の一時ファイル置き場 (git ignore 対象)
 ```
