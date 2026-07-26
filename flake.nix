@@ -43,11 +43,18 @@
         );
 
       # home-manager の適用対象。マシンを追加する場合はここに追記する。
-      # 名前は `make hm-switch HM_TARGET=<name>` で指定するものと一致する。
+      # 名前はユーザー名と一致させる。Makefile の HM_TARGET は既定で実行中の
+      # ユーザー名 (id -un) を使うため、環境ごとに指定せずに済む。
       homeTargets = {
         sabas0ba = {
           system = "x86_64-linux";
           homeDirectory = "/home/sabas0ba";
+        };
+
+        # Claude Code のリモート実行環境。root で動作し、HOME は /root。
+        root = {
+          system = "x86_64-linux";
+          homeDirectory = "/root";
         };
       };
 

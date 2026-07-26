@@ -107,8 +107,21 @@ make hm-dry     # 配置内容の確認 (実際には配置しない)
 make hm-switch  # 配置の実行
 ```
 
-対象を切り替える場合は `make hm-switch HM_TARGET=<name>` を使用する。マシンを
-追加する場合は `flake.nix` の `homeTargets` に追記する。
+`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使用する。したがって環境ごとに
+指定する必要はない。明示する場合は `make hm-switch HM_TARGET=<name>` とする。マシンを
+追加する場合は `flake.nix` の `homeTargets` にユーザー名と一致する名前で追記する。
+
+現在定義してある対象は以下のとおり。
+
+| 対象 | ホームディレクトリ | 用途 |
+| --- | --- | --- |
+| `sabas0ba` | `/home/sabas0ba` | 個人環境 |
+| `root` | `/root` | Claude Code のリモート実行環境 (root で動作する) |
+
+Claude Code のリモート実行環境では、`~/.gitconfig` をセッション側が管理しており、
+コミット署名やプロキシ経由の URL 書き換えが設定されている。home-manager が生成するのは
+`~/.config/git/config` であるためファイルの衝突は起きないが、git は `~/.gitconfig` を
+後に読むため、user の設定は当該環境ではセッション側が優先される。
 
 `home/.claude` は `recursive = true` で配置しており、ディレクトリ自体ではなく配下の
 ファイルを個別に symlink する。`~/.claude` に home-manager の管理外のファイルが

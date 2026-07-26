@@ -6,7 +6,8 @@ SHELL := /usr/bin/env bash
 DOCKER_IMAGE ?= dotfiles-dev
 NIX ?= nix
 # home-manager の適用対象。flake.nix の homeTargets に定義した名前を指定する。
-HM_TARGET ?= sabas0ba
+# 既定は実行中のユーザー名。環境ごとに指定せずに済むようにするため。
+HM_TARGET ?= $(shell id -un)
 
 .PHONY: help
 help: ## 本ヘルプを表示する
@@ -72,11 +73,15 @@ hm-build: ## ホームの構成を構築する (配置は行わない)
 	$(NIX) build --no-link --print-out-paths \
 		'.#homeConfigurations.$(HM_TARGET).activationPackage'
 
+# home-manager の activation script は USER を参照する。Claude Code のリモート実行
+# 環境のように USER が設定されていない環境があるため、ここで補う。
+HM_ACTIVATE_ENV = USER="$(HM_TARGET)"
+
 .PHONY: hm-dry
 hm-dry: ## 配置内容を表示する (実際には配置しない)
 	@out="$$($(NIX) build --no-link --print-out-paths \
 		'.#homeConfigurations.$(HM_TARGET).activationPackage')"; \
-	DRY_RUN=1 "$$out/activate"
+	$(HM_ACTIVATE_ENV) DRY_RUN=1 "$$out/activate"
 
 .PHONY: hm-switch
 hm-switch: ## ホームディレクトリへ配置する
@@ -84,7 +89,7 @@ hm-switch: ## ホームディレクトリへ配置する
 	@echo "先に make hm-dry で対象を確認すること。"
 	@out="$$($(NIX) build --no-link --print-out-paths \
 		'.#homeConfigurations.$(HM_TARGET).activationPackage')"; \
-	"$$out/activate"
+	$(HM_ACTIVATE_ENV) "$$out/activate"
 
 # --- コンテナ側の環境 -------------------------------------------------------
 
