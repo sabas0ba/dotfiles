@@ -26,7 +26,7 @@ scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
 
 以下は影響が利用者の環境に及ぶため、実行前に対象を提示し、承認を得ること。
 
-- `make stow` によるホームディレクトリへの配置。先に `make stow-dry` の結果を提示する
+- `make hm-switch` によるホームディレクトリへの配置。先に `make hm-dry` の結果を提示する
 - 依存の追加 (flake の入力、`nix/packages.nix` のパッケージ、GitHub Actions)。
   追加する場合はリビジョンまたはダイジェストで固定する
 

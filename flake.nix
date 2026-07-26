@@ -2,14 +2,25 @@
   description = "dotfiles: Nix と direnv による再現性のある開発環境";
 
   inputs = {
-    # nixpkgs はリビジョンで固定する。ブランチ名 (nixos-26.05 等) による参照は
+    # 入力はリビジョンで固定する。ブランチ名 (nixos-26.05 等) による参照は
     # flake.lock が無い環境で取得結果が変動するため使用しない。
     # 更新は `make bump REV=<rev>` で行い、flake.lock を同一のコミットに含める。
     nixpkgs.url = "github:NixOS/nixpkgs/597283ad8aa0b331c788e97c4c262d58877074ef"; # nixos-26.05
+
+    # ホームディレクトリの設定を宣言的に管理する。nixpkgs のリリースに対応する
+    # ブランチ (release-26.05) のリビジョンで固定する。
+    home-manager = {
+      url = "github:nix-community/home-manager/4ce190229c73d44536caa7072f6308fb2d8feeb3"; # release-26.05
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      home-manager,
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -30,6 +41,27 @@
             }
           )
         );
+
+      # home-manager の適用対象。マシンを追加する場合はここに追記する。
+      # 名前は `make hm-switch HM_TARGET=<name>` で指定するものと一致する。
+      homeTargets = {
+        sabas0ba = {
+          system = "x86_64-linux";
+          homeDirectory = "/home/sabas0ba";
+        };
+      };
+
+      mkHomeConfiguration =
+        username:
+        {
+          system,
+          homeDirectory,
+        }:
+        home-manager.lib.homeManagerConfiguration {
+          pkgs = import nixpkgs { inherit system; };
+          modules = [ ./nix/home.nix ];
+          extraSpecialArgs = { inherit username homeDirectory; };
+        };
     in
     {
       # `nix develop` および direnv の `use flake` が使用する開発シェル。
@@ -45,6 +77,9 @@
           paths = import ./nix/packages.nix { inherit pkgs; };
         };
       });
+
+      # ホームディレクトリの構成。`make hm-switch` から適用する。
+      homeConfigurations = nixpkgs.lib.mapAttrs mkHomeConfiguration homeTargets;
 
       # `nix flake check` および `make check` が実行する検査。
       checks = forAllSystems (

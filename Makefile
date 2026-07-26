@@ -5,8 +5,8 @@ SHELL := /usr/bin/env bash
 
 DOCKER_IMAGE ?= dotfiles-dev
 NIX ?= nix
-# stow パッケージ名。home/ 以下がホームディレクトリの構造に対応する。
-STOW_PACKAGE ?= home
+# home-manager の適用対象。flake.nix の homeTargets に定義した名前を指定する。
+HM_TARGET ?= sabas0ba
 
 .PHONY: help
 help: ## 本ヘルプを表示する
@@ -65,21 +65,26 @@ env: ## 環境が構成されているかを確認する
 gc: ## 参照されていない Nix の成果物を削除する
 	$(NIX) store gc
 
-# --- dotfiles の配置 --------------------------------------------------------
+# --- ホームディレクトリの構成 (home-manager) --------------------------------
 
-.PHONY: stow-dry
-stow-dry: ## dotfiles の配置内容を表示する (実際には配置しない)
-	stow --simulate --verbose --target="$(HOME)" $(STOW_PACKAGE)
+.PHONY: hm-build
+hm-build: ## ホームの構成を構築する (配置は行わない)
+	$(NIX) build --no-link --print-out-paths \
+		'.#homeConfigurations.$(HM_TARGET).activationPackage'
 
-.PHONY: stow
-stow: ## dotfiles をホームディレクトリに配置する
+.PHONY: hm-dry
+hm-dry: ## 配置内容を表示する (実際には配置しない)
+	@out="$$($(NIX) build --no-link --print-out-paths \
+		'.#homeConfigurations.$(HM_TARGET).activationPackage')"; \
+	DRY_RUN=1 "$$out/activate"
+
+.PHONY: hm-switch
+hm-switch: ## ホームディレクトリへ配置する
 	@echo "ホームディレクトリの既存ファイルを置き換える可能性がある。"
-	@echo "先に make stow-dry で対象を確認すること。"
-	stow --verbose --target="$(HOME)" $(STOW_PACKAGE)
-
-.PHONY: unstow
-unstow: ## 配置した symlink を削除する (配置前の状態に戻す)
-	stow --delete --verbose --target="$(HOME)" $(STOW_PACKAGE)
+	@echo "先に make hm-dry で対象を確認すること。"
+	@out="$$($(NIX) build --no-link --print-out-paths \
+		'.#homeConfigurations.$(HM_TARGET).activationPackage')"; \
+	"$$out/activate"
 
 # --- コンテナ側の環境 -------------------------------------------------------
 

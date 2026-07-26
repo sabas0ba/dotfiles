@@ -22,7 +22,6 @@ required_commands=(
   shellcheck
   shfmt
   statix
-  stow
   tree
   yq
 )

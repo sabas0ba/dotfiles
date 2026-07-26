@@ -87,19 +87,32 @@ make shell         # 開発シェルに入る (direnv 未使用時)
 `npm install -g` / `pip install --user` 等は再現性を損なう。必要なツールは
 `nix/packages.nix` に追記して取得する。
 
-## dotfiles の配置
+## ホームディレクトリの構成
 
-`home/` 以下がホームディレクトリの構造に対応する (例: `home/.claude/CLAUDE.md` は
-`~/.claude/CLAUDE.md` に配置される)。配置には GNU stow を使用し、コピーではなく
-symlink を張る。したがって配置後の編集はリポジトリの変更として現れる。
+ホームディレクトリの内容は home-manager で宣言的に管理する。設定は
+[`nix/home.nix`](nix/home.nix) に定義し、適用対象 (ユーザー名とホームディレクトリ) は
+`flake.nix` の `homeTargets` に定義する。
+
+管理対象は 2 種類ある。
+
+- 設定の生成: `programs.git` 等。git の user/email もここで設定する
+- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する
+  (例: `home/.claude/CLAUDE.md` は `~/.claude/CLAUDE.md` に配置される)
 
 既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
 
 ```bash
-make stow-dry   # 配置内容の確認 (実際には配置しない)
-make stow       # 配置の実行
-make unstow     # 配置の取り消し
+make hm-build   # 構成の構築のみ (ホームディレクトリは変更しない)
+make hm-dry     # 配置内容の確認 (実際には配置しない)
+make hm-switch  # 配置の実行
 ```
+
+対象を切り替える場合は `make hm-switch HM_TARGET=<name>` を使用する。マシンを
+追加する場合は `flake.nix` の `homeTargets` に追記する。
+
+`home/.claude` は `recursive = true` で配置しており、ディレクトリ自体ではなく配下の
+ファイルを個別に symlink する。`~/.claude` に home-manager の管理外のファイルが
+存在する場合でも、それらを置き換えない。
 
 ## コンテナ環境
 
@@ -148,10 +161,11 @@ nix shell nixpkgs#jq
 
 `Dockerfile` にツール名を追記しない。定義が重複し、不整合が生じるため。
 
-### dotfiles を追加する
+### ホームディレクトリの構成を変更する
 
-`home/` 以下に、ホームディレクトリからの相対パスで配置する。配置手順は
-[dotfiles の配置](#dotfiles-の配置) を参照する。
+宣言的に書ける設定は `nix/home.nix` に記述する。生ファイルとして配置するものは
+`home/` 以下に、ホームディレクトリからの相対パスで置く。手順は
+[ホームディレクトリの構成](#ホームディレクトリの構成) を参照する。
 
 ### nixpkgs を更新する
 
@@ -222,6 +236,7 @@ make docker-check
 | 対象 | 固定方法 | 定義箇所 |
 | --- | --- | --- |
 | nixpkgs | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
+| home-manager | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
 | ツール一式 | 上記 nixpkgs から解決 | `nix/packages.nix` |
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
@@ -238,11 +253,12 @@ flake.lock               入力の解決結果
 nix/packages.nix         ツールの一覧 (単一情報源)
 nix/devshell.nix         開発シェルの定義
 nix/checks.nix           nix flake check が実行する検査
+nix/home.nix             home-manager によるホームディレクトリの構成
 .envrc                   direnv の設定
 Dockerfile               同一の flake からコンテナを構築する
 Makefile                 操作の入り口
 scripts/                 ヘルパースクリプト
-home/                    ホームディレクトリへ配置する dotfiles (stow パッケージ)
+home/                    ホームディレクトリへ配置する生ファイル
 .github/workflows/ci.yml CI 定義
 CLAUDE.md                Claude Code 向けの補足
 .work/                   作業用の一時ファイル置き場 (git ignore 対象)
