@@ -1,7 +1,9 @@
 # イメージに含める必要がないもの。COPY . . の対象から除外される。
+#
+# .github/ は除外しない。検査はコンテナ内で実行するため、scripts/check-pins.sh が
+# 参照するワークフローがイメージ内に存在する必要がある。
 
 .git/
-.github/
 .direnv/
 .envrc.local
 .work/

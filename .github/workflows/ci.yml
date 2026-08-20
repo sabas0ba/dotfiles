@@ -18,7 +18,9 @@ concurrency:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # ランナーはバージョンを指定する。ubuntu-latest は可変であり、更新時期を
+    # 制御できない。検査はコンテナ内で完結するため、ランナー側の内容には依存しない。
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout
         # actions/checkout v4.2.2

@@ -20,19 +20,23 @@ Nix と direnv による再現性のある開発環境、および同一の定�
 配布物をバージョン固定で取得し、チェックサムを検証してから展開する。インストーラを
 検証せずに直接実行する方式 (`curl ... | sh`) は用いない。
 
+チェックサムは本文に固定した値を使用する。配布元から取得した値との照合は、配布元が
+差し替えられた場合に同時に差し替わるため、検証にならない。
+
 ```bash
 NIX_VERSION=2.35.1
-BASE="https://releases.nixos.org/nix/nix-${NIX_VERSION}"
-TARBALL="nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz"
+NIX_SHA256=c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3
+TARBALL="nix-${NIX_VERSION}-x86_64-linux.tar.xz"
 
-curl -LO "${BASE}/${TARBALL}"
-curl -L "${BASE}/${TARBALL}.sha256" | tr -d '\n' | sed "s|$|  ${TARBALL}|" | sha256sum -c -
+curl -LO "https://releases.nixos.org/nix/nix-${NIX_VERSION}/${TARBALL}"
+echo "${NIX_SHA256}  ${TARBALL}" | sha256sum -c -
 tar -xf "${TARBALL}"
-"nix-${NIX_VERSION}-$(uname -m)-linux/install" --daemon
+"nix-${NIX_VERSION}-x86_64-linux/install" --daemon
 ```
 
-x86_64-linux における sha256 は
-`c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3` である。
+上記の sha256 は x86_64-linux の配布物に対する値である。他のアーキテクチャで導入する
+場合は、対応する配布物の sha256 を確認したうえで置き換える。`NIX_VERSION` は
+`Dockerfile` の `ARG NIX_VERSION` と一致させる。
 
 flakes を有効化する (`~/.config/nix/nix.conf` または `/etc/nix/nix.conf`)。
 
@@ -165,7 +169,10 @@ nix shell nixpkgs#jq
 
 `.github/workflows/ci.yml` で、イメージを構築し、`--network none` のコンテナ内で
 `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査は
-コンテナ内で行う。
+コンテナ内で行う。push (main) と pull request で自動実行する。
+
+`.github/workflows/update-pins.yml` は固定の更新と PR の作成を行う。手動実行のみで、
+定期実行はしない。詳細は [開発](#ci-から更新して-pr-を作成する) を参照する。
 
 ## 開発
 
@@ -194,12 +201,64 @@ make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)
 make check
 ```
 
-nixpkgs の更新は独立したコミットとし、他の変更と混在させない。
+nixpkgs の更新は独立したコミットとし、他の変更と混在させない。`flake.lock` の
+再生成を忘れた場合は `make check` が失敗する ([再現性](#再現性) を参照)。
 
-### ベースイメージを更新する
+### home-manager を更新する
 
-`Dockerfile` の `NIX_VERSION` と `NIX_IMAGE_DIGEST` を同時に変更する。ダイジェストは
-`docker buildx imagetools inspect nixos/nix:<version>` で取得する。
+nixpkgs と同様に rev で固定してある。`release-26.05` の HEAD を指定する。
+
+```bash
+make bump-hm REV=<40 桁の rev>
+make check
+```
+
+### ベースイメージ・Actions・インストーラを更新する
+
+これらは `flake.lock` の再生成を伴わないため、`scripts/update-pins.sh` を直接呼ぶ。
+対象と値の取得方法は `make bump-help` で一覧できる。
+
+```bash
+# ベースイメージ (docker buildx imagetools inspect nixos/nix:<バージョン> で取得)
+scripts/update-pins.sh image 2.35.1 sha256:377d4887...
+
+# GitHub Actions (対象タグが指すコミット SHA)
+scripts/update-pins.sh action actions/checkout 11bd7190...
+
+# Nix インストーラ (releases.nixos.org の .sha256)
+scripts/update-pins.sh nix-installer 2.35.1 c3fe2977...
+```
+
+上流の最新版を自動で取得して書き換えることはしない。更新は意図的な操作であり、値は
+明示的に与える。与えた値は形式を検査したうえで書き込み、変更対象が見つからない場合は
+失敗する (記述が変わったことに気付かないまま進むのを防ぐため)。
+
+### CI から更新して PR を作成する
+
+手元に環境が無い場合は、GitHub Actions の `Update pins` ワークフローを手動実行する
+(Actions タブ、または `gh workflow run update-pins.yml`)。対象と値を入力すると、更新、
+検証、PR の作成までを行う。定期実行はしない。更新は意図的な操作であるため。
+
+ワークフローが行う手順は以下である。
+
+1. `scripts/update-pins.sh` で値を書き換える
+2. `flake.nix` を変更した場合は `flake.lock` を再生成する。イメージを構築する前に行う
+   (両者が整合していないと nix が暗黙に再ロックするため)。ここで使う nix は
+   `Dockerfile` が固定しているベースイメージから取る。ワークフローに版を書くと
+   二重管理になるため
+3. イメージを構築し、`--network none` のコンテナ内で `make check` を実行する。CI と
+   同一の経路である
+4. ブランチを作成し、PR を開く
+
+PR の作成には外部 action を使用せず、ランナー同梱の `gh` と `GITHUB_TOKEN` を用いる。
+外部 action を増やさないため。
+
+`GITHUB_TOKEN` で作成した PR では他のワークフローが起動しない (GitHub の仕様)。その
+PR に CI のチェックは付かないため、上記 3 の結果を PR 本文に記載している。CI を回す
+必要がある場合は、close して reopen するか、ブランチに空でないコミットを push する。
+
+ベースイメージを更新した場合は、README の `NIX_VERSION` も一致させる。不一致は
+`make check` が検出する。
 
 ### Dockerfile を変更する
 
@@ -257,10 +316,42 @@ make docker-check
 | ツール一式 | 上記 nixpkgs から解決 | `nix/packages.nix` |
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
+| CI ランナー | バージョン付きラベル (`ubuntu-24.04`) | `.github/workflows/ci.yml` |
+| Nix インストーラ | バージョン + sha256 | `README.md` |
 | ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
 
 `flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock`
 で生成する。
+
+`flake.nix` と `flake.lock` の整合は `scripts/check-lock.sh` が検査する (`make check`
+および CI に含まれる)。ネットワークを使用せず、両ファイルの内容のみを照合する。
+
+nix 自身が検出するのは、lock の再生成が必要になる乖離 (rev の不一致等) に限られる。
+この場合 nix は入力の再取得を試みるため、失敗はネットワークのエラーとして現れ、原因が
+lock の古さであることが分からない。一方、**入力がブランチ名で参照されている場合、nix は
+これを正常として扱う**。lock には rev が記録されるため評価は再現するが、`flake.nix` の
+記述は固定になっておらず、lock を再生成した時点で追従先が変わる。本検査はこの双方を、
+オフラインかつ原因の分かる形で検出する。
+
+検査する内容は以下である。
+
+- `flake.nix` の入力がすべて 40 桁の rev で指定されていること
+- その rev が `flake.lock` に同一の値で記録されていること
+- `flake.lock` の各ノードが narHash を持ち、一意に固定されていること
+- `flake.nix` から削除された入力が `flake.lock` に取り残されていないこと
+
+flake 以外の参照は `scripts/check-pins.sh` が検査する。こちらもネットワークを使用せず、
+作業木の内容のみを見る。
+
+- `Dockerfile` の `FROM` がダイジェストで固定されていること (`ARG` 経由の参照も展開して
+  判定する。既定値を持たない `ARG` はビルド時に差し替え可能なため固定とみなさない)
+- ワークフローの `uses` がコミット SHA で固定されていること
+- ワークフローの `runs-on` が `-latest` でないこと
+- README の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` と一致すること
+- README に固定した `NIX_SHA256` があり、配布元から取得した値との照合になっていないこと
+
+いずれも「上流に新しい版があるか」は見ない。それは更新の判断であり、検査の対象では
+ないため。更新の手順は [開発](#開発) にある。
 
 ## 構成
 
