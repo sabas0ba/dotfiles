@@ -37,6 +37,12 @@ in
     bash scripts/check-lock.sh
   '';
 
+  # 外部の成果物 (ベースイメージ、GitHub Actions、ランナー、Nix インストーラ) が
+  # 一意に固定されていること。タグのみの参照は固定とみなさない。
+  pins = mkCheck "pins" [ pkgs.gnugrep pkgs.findutils ] ''
+    bash scripts/check-pins.sh
+  '';
+
   # シェルスクリプトの静的解析。.envrc も bash として検査する。
   shellcheck = mkCheck "shellcheck" [ pkgs.shellcheck ] ''
     shellcheck scripts/*.sh

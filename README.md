@@ -201,10 +201,37 @@ make check
 nixpkgs の更新は独立したコミットとし、他の変更と混在させない。`flake.lock` の
 再生成を忘れた場合は `make check` が失敗する ([再現性](#再現性) を参照)。
 
-### ベースイメージを更新する
+### home-manager を更新する
 
-`Dockerfile` の `NIX_VERSION` と `NIX_IMAGE_DIGEST` を同時に変更する。ダイジェストは
-`docker buildx imagetools inspect nixos/nix:<version>` で取得する。
+nixpkgs と同様に rev で固定してある。`release-26.05` の HEAD を指定する。
+
+```bash
+make bump-hm REV=<40 桁の rev>
+make check
+```
+
+### ベースイメージ・Actions・インストーラを更新する
+
+これらは `flake.lock` の再生成を伴わないため、`scripts/update-pins.sh` を直接呼ぶ。
+対象と値の取得方法は `make bump-help` で一覧できる。
+
+```bash
+# ベースイメージ (docker buildx imagetools inspect nixos/nix:<バージョン> で取得)
+scripts/update-pins.sh image 2.35.1 sha256:377d4887...
+
+# GitHub Actions (対象タグが指すコミット SHA)
+scripts/update-pins.sh action actions/checkout 11bd7190...
+
+# Nix インストーラ (releases.nixos.org の .sha256)
+scripts/update-pins.sh nix-installer 2.35.1 c3fe2977...
+```
+
+上流の最新版を自動で取得して書き換えることはしない。更新は意図的な操作であり、値は
+明示的に与える。与えた値は形式を検査したうえで書き込み、変更対象が見つからない場合は
+失敗する (記述が変わったことに気付かないまま進むのを防ぐため)。
+
+ベースイメージを更新した場合は、README の `NIX_VERSION` も一致させる。不一致は
+`make check` が検出する。
 
 ### Dockerfile を変更する
 
@@ -285,6 +312,19 @@ lock の古さであることが分からない。一方、**入力がブラン�
 - その rev が `flake.lock` に同一の値で記録されていること
 - `flake.lock` の各ノードが narHash を持ち、一意に固定されていること
 - `flake.nix` から削除された入力が `flake.lock` に取り残されていないこと
+
+flake 以外の参照は `scripts/check-pins.sh` が検査する。こちらもネットワークを使用せず、
+作業木の内容のみを見る。
+
+- `Dockerfile` の `FROM` がダイジェストで固定されていること (`ARG` 経由の参照も展開して
+  判定する。既定値を持たない `ARG` はビルド時に差し替え可能なため固定とみなさない)
+- ワークフローの `uses` がコミット SHA で固定されていること
+- ワークフローの `runs-on` が `-latest` でないこと
+- README の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` と一致すること
+- README に固定した `NIX_SHA256` があり、配布元から取得した値との照合になっていないこと
+
+いずれも「上流に新しい版があるか」は見ない。それは更新の判断であり、検査の対象では
+ないため。更新の手順は [開発](#開発) にある。
 
 ## 構成
 

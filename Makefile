@@ -37,9 +37,24 @@ bump: ## nixpkgs の rev を更新する (make bump REV=<40 桁の rev>)
 		echo "  安定版の rev: curl -sL https://channels.nixos.org/nixos-26.05/git-revision"; \
 		exit 1; \
 	}
-	sed -i.bak -E 's|github:NixOS/nixpkgs/[0-9a-f]{40}|github:NixOS/nixpkgs/$(REV)|' flake.nix
-	rm -f flake.nix.bak
+	scripts/update-pins.sh nixpkgs $(REV)
 	$(NIX) flake update
+
+.PHONY: bump-hm
+bump-hm: ## home-manager の rev を更新する (make bump-hm REV=<40 桁の rev>)
+	@test -n "$(REV)" || { \
+		echo "使用方法: make bump-hm REV=<home-manager の rev>"; \
+		echo "  release-26.05 の HEAD を指定する"; \
+		exit 1; \
+	}
+	scripts/update-pins.sh home-manager $(REV)
+	$(NIX) flake update
+
+# ベースイメージ、GitHub Actions、Nix インストーラの更新は flake.lock の再生成を
+# 伴わないため、スクリプトを直接呼ぶ。対象と値の取得方法は --help に示す。
+.PHONY: bump-help
+bump-help: ## 固定の更新方法を表示する
+	scripts/update-pins.sh --help
 
 .PHONY: check
 check: ## すべての検査を実行する (nix flake check + 環境のスモークテスト)
@@ -56,6 +71,7 @@ lint: ## 静的解析のみを実行する (整形は行わない)
 	statix check .
 	deadnix --fail .
 	scripts/check-lock.sh
+	scripts/check-pins.sh
 	shellcheck scripts/*.sh
 	shellcheck --shell=bash .envrc
 
