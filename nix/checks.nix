@@ -30,6 +30,13 @@ in
     deadnix --fail .
   '';
 
+  # flake.nix の入力と flake.lock の整合。
+  # 入力がブランチ名で参照されている場合、nix はこれを正常として扱うため、この検査が
+  # 無ければ固定漏れが通過する。ネットワークは使用しない。
+  lock = mkCheck "lock" [ pkgs.jq ] ''
+    bash scripts/check-lock.sh
+  '';
+
   # シェルスクリプトの静的解析。.envrc も bash として検査する。
   shellcheck = mkCheck "shellcheck" [ pkgs.shellcheck ] ''
     shellcheck scripts/*.sh

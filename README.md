@@ -194,7 +194,8 @@ make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)
 make check
 ```
 
-nixpkgs の更新は独立したコミットとし、他の変更と混在させない。
+nixpkgs の更新は独立したコミットとし、他の変更と混在させない。`flake.lock` の
+再生成を忘れた場合は `make check` が失敗する ([再現性](#再現性) を参照)。
 
 ### ベースイメージを更新する
 
@@ -261,6 +262,23 @@ make docker-check
 
 `flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock`
 で生成する。
+
+`flake.nix` と `flake.lock` の整合は `scripts/check-lock.sh` が検査する (`make check`
+および CI に含まれる)。ネットワークを使用せず、両ファイルの内容のみを照合する。
+
+nix 自身が検出するのは、lock の再生成が必要になる乖離 (rev の不一致等) に限られる。
+この場合 nix は入力の再取得を試みるため、失敗はネットワークのエラーとして現れ、原因が
+lock の古さであることが分からない。一方、**入力がブランチ名で参照されている場合、nix は
+これを正常として扱う**。lock には rev が記録されるため評価は再現するが、`flake.nix` の
+記述は固定になっておらず、lock を再生成した時点で追従先が変わる。本検査はこの双方を、
+オフラインかつ原因の分かる形で検出する。
+
+検査する内容は以下である。
+
+- `flake.nix` の入力がすべて 40 桁の rev で指定されていること
+- その rev が `flake.lock` に同一の値で記録されていること
+- `flake.lock` の各ノードが narHash を持ち、一意に固定されていること
+- `flake.nix` から削除された入力が `flake.lock` に取り残されていないこと
 
 ## 構成
 

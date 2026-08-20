@@ -55,6 +55,7 @@ fmt: ## Nix およびシェルスクリプトを整形する
 lint: ## 静的解析のみを実行する (整形は行わない)
 	statix check .
 	deadnix --fail .
+	scripts/check-lock.sh
 	shellcheck scripts/*.sh
 	shellcheck --shell=bash .envrc
 
