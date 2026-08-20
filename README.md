@@ -169,7 +169,10 @@ nix shell nixpkgs#jq
 
 `.github/workflows/ci.yml` で、イメージを構築し、`--network none` のコンテナ内で
 `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査は
-コンテナ内で行う。
+コンテナ内で行う。push (main) と pull request で自動実行する。
+
+`.github/workflows/update-pins.yml` は固定の更新と PR の作成を行う。手動実行のみで、
+定期実行はしない。詳細は [開発](#ci-から更新して-pr-を作成する) を参照する。
 
 ## 開発
 
@@ -229,6 +232,30 @@ scripts/update-pins.sh nix-installer 2.35.1 c3fe2977...
 上流の最新版を自動で取得して書き換えることはしない。更新は意図的な操作であり、値は
 明示的に与える。与えた値は形式を検査したうえで書き込み、変更対象が見つからない場合は
 失敗する (記述が変わったことに気付かないまま進むのを防ぐため)。
+
+### CI から更新して PR を作成する
+
+手元に環境が無い場合は、GitHub Actions の `Update pins` ワークフローを手動実行する
+(Actions タブ、または `gh workflow run update-pins.yml`)。対象と値を入力すると、更新、
+検証、PR の作成までを行う。定期実行はしない。更新は意図的な操作であるため。
+
+ワークフローが行う手順は以下である。
+
+1. `scripts/update-pins.sh` で値を書き換える
+2. `flake.nix` を変更した場合は `flake.lock` を再生成する。イメージを構築する前に行う
+   (両者が整合していないと nix が暗黙に再ロックするため)。ここで使う nix は
+   `Dockerfile` が固定しているベースイメージから取る。ワークフローに版を書くと
+   二重管理になるため
+3. イメージを構築し、`--network none` のコンテナ内で `make check` を実行する。CI と
+   同一の経路である
+4. ブランチを作成し、PR を開く
+
+PR の作成には外部 action を使用せず、ランナー同梱の `gh` と `GITHUB_TOKEN` を用いる。
+外部 action を増やさないため。
+
+`GITHUB_TOKEN` で作成した PR では他のワークフローが起動しない (GitHub の仕様)。その
+PR に CI のチェックは付かないため、上記 3 の結果を PR 本文に記載している。CI を回す
+必要がある場合は、close して reopen するか、ブランチに空でないコミットを push する。
 
 ベースイメージを更新した場合は、README の `NIX_VERSION` も一致させる。不一致は
 `make check` が検出する。
