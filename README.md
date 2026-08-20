@@ -20,19 +20,23 @@ Nix と direnv による再現性のある開発環境、および同一の定�
 配布物をバージョン固定で取得し、チェックサムを検証してから展開する。インストーラを
 検証せずに直接実行する方式 (`curl ... | sh`) は用いない。
 
+チェックサムは本文に固定した値を使用する。配布元から取得した値との照合は、配布元が
+差し替えられた場合に同時に差し替わるため、検証にならない。
+
 ```bash
 NIX_VERSION=2.35.1
-BASE="https://releases.nixos.org/nix/nix-${NIX_VERSION}"
-TARBALL="nix-${NIX_VERSION}-$(uname -m)-linux.tar.xz"
+NIX_SHA256=c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3
+TARBALL="nix-${NIX_VERSION}-x86_64-linux.tar.xz"
 
-curl -LO "${BASE}/${TARBALL}"
-curl -L "${BASE}/${TARBALL}.sha256" | tr -d '\n' | sed "s|$|  ${TARBALL}|" | sha256sum -c -
+curl -LO "https://releases.nixos.org/nix/nix-${NIX_VERSION}/${TARBALL}"
+echo "${NIX_SHA256}  ${TARBALL}" | sha256sum -c -
 tar -xf "${TARBALL}"
-"nix-${NIX_VERSION}-$(uname -m)-linux/install" --daemon
+"nix-${NIX_VERSION}-x86_64-linux/install" --daemon
 ```
 
-x86_64-linux における sha256 は
-`c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3` である。
+上記の sha256 は x86_64-linux の配布物に対する値である。他のアーキテクチャで導入する
+場合は、対応する配布物の sha256 を確認したうえで置き換える。`NIX_VERSION` は
+`Dockerfile` の `ARG NIX_VERSION` と一致させる。
 
 flakes を有効化する (`~/.config/nix/nix.conf` または `/etc/nix/nix.conf`)。
 
@@ -258,6 +262,8 @@ make docker-check
 | ツール一式 | 上記 nixpkgs から解決 | `nix/packages.nix` |
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
+| CI ランナー | バージョン付きラベル (`ubuntu-24.04`) | `.github/workflows/ci.yml` |
+| Nix インストーラ | バージョン + sha256 | `README.md` |
 | ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
 
 `flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock`
