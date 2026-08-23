@@ -14,12 +14,11 @@
 #
 # いずれの段も、既に済んでいる処理は飛ばす。失敗した場合はそのまま再実行できる。
 #
-#   使用方法: scripts/wsl-provision.sh <system|home> <nixos|ubuntu>
+# 利用者名と nixosConfigurations の名前はオプションで差し替えられる。同じ環境の
+# 改変版を別のディストリビューションとして併存させる場合に用いる。
+#
+#   使用方法: scripts/wsl-provision.sh <段> <distro> [オプション]  (--help で一覧)
 set -euo pipefail
-
-# WSL 上の利用者。flake.nix の homeTargets および NixOS-WSL の wsl.defaultUser の
-# 既定値と一致させる。
-readonly PROVISION_USER=nixos
 
 # Ubuntu 経路で導入する Nix。README の「Nix の導入」と同一の値であること。
 # 一致は scripts/check-pins.sh が検査する。
@@ -30,7 +29,7 @@ readonly NIX_FLAKE_CONF='experimental-features = nix-command flakes'
 
 usage() {
   cat <<'USAGE'
-使用方法: scripts/wsl-provision.sh <段> <distro> [wsl.conf のパス]
+使用方法: scripts/wsl-provision.sh <段> <distro> [オプション]
 
 段:
   system   root で実行する。/etc/wsl.conf、ユーザー、Nix、system の構成
@@ -41,20 +40,56 @@ distro:
   nixos   NixOS-WSL。system の構成は nix/wsl.nix が持つ
   ubuntu  Ubuntu。Nix を導入する。system は宣言的にならない
 
-第 3 引数は wsl.conf の対象を差し替える。scripts/test-wsl-conf.sh が使用する。
+オプション:
+  --user <名前>          WSL 上の利用者。既定 nixos。flake.nix の homeTargets に
+                         同名の対象が必要である
+  --flake-target <名前>  nixosConfigurations の名前。既定 wsl
+  --wsl-conf <パス>      wsl.conf の対象。既定 /etc/wsl.conf。検査で差し替える
+
+同じ環境の改変版を別の WSL ディストリビューションとして併存させる場合は、
+--user と --flake-target で対象を分ける。登録名とリポジトリは
+scripts/wsl-bootstrap.ps1 の -Name と -RepoUrl で指定する。
 
 通常は scripts/wsl-bootstrap.ps1 から呼ばれる。単独で再実行することもできる。
 USAGE
 }
 
-if [ "$#" -lt 2 ] || [ "$#" -gt 3 ]; then
+if [ "$#" -lt 2 ]; then
   usage >&2
   exit 1
 fi
 
 stage=$1
 distro=$2
-wsl_conf=${3:-/etc/wsl.conf}
+shift 2
+
+# 既定値。上書きは以降のオプションで行う。
+provision_user=nixos
+flake_target=wsl
+wsl_conf=/etc/wsl.conf
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --user)
+      provision_user=${2:?--user に値が必要です}
+      shift 2
+      ;;
+    --flake-target)
+      flake_target=${2:?--flake-target に値が必要です}
+      shift 2
+      ;;
+    --wsl-conf)
+      wsl_conf=${2:?--wsl-conf に値が必要です}
+      shift 2
+      ;;
+    *)
+      echo "エラー: オプションが不明です: $1" >&2
+      echo >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+done
 
 case "$distro" in
   nixos | ubuntu) ;;
@@ -81,8 +116,9 @@ note() {
 # 設定 (Ubuntu の [boot] systemd 等) を消すと、以降の処理が成立しないため、丸ごと
 # 上書きせず、自分が管理するキーだけを差し替える。
 #
-# NixOS では switch 後に nix/wsl.nix の内容で再生成されるが、それまでの間も隔離を
-# 成立させるためにここでも書く。
+# NixOS では扱わない。当該経路のこのファイルは nix/wsl.nix から生成された Nix store
+# への symlink であり、書き込めないため。呼ばれるのは Ubuntu 経路と、段 wslconf
+# (復旧および検査) のときだけである。
 
 readonly MANAGED_SECTIONS=(automount interop user)
 
@@ -90,7 +126,7 @@ emit_managed_keys() {
   case "$1" in
     automount) printf 'enabled = false\n' ;;
     interop) printf 'enabled = false\nappendWindowsPath = false\n' ;;
-    user) printf 'default = %s\n' "$PROVISION_USER" ;;
+    user) printf 'default = %s\n' "$provision_user" ;;
   esac
 }
 
@@ -175,7 +211,7 @@ merge_wsl_conf() {
 # --- 段: system --------------------------------------------------------------
 
 ensure_sudoers() {
-  local path=/etc/sudoers.d/$PROVISION_USER
+  local path=/etc/sudoers.d/$provision_user
 
   if [ -f "$path" ]; then
     note "sudo の設定は既にある ($path)"
@@ -185,7 +221,7 @@ ensure_sudoers() {
   # パスワードを要求しない。WSL では wsl.exe -u root で無条件に root になれるため、
   # ここでのパスワードは境界として機能しない。NixOS-WSL が既定ユーザーに対して
   # security.sudo.wheelNeedsPassword = false としているのと同じ扱いに揃える。
-  printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$PROVISION_USER" >"$path"
+  printf '%s ALL=(ALL) NOPASSWD:ALL\n' "$provision_user" >"$path"
   chmod 0440 "$path"
   note "sudo をパスワード無しで許可した ($path)"
 }
@@ -199,8 +235,14 @@ install_nix() {
   local work=$repo/.work/nix
   local tarball="nix-${NIX_VERSION}-x86_64-linux.tar.xz"
   local url="https://releases.nixos.org/nix/nix-${NIX_VERSION}/${tarball}"
+  local owner
 
+  # 作業用のファイルはリポジトリ内の git ignore された場所に置く。ただし本段は root
+  # で動くため、作ったディレクトリの所有者を利用者に合わせる。root 所有のまま残すと、
+  # 以降 .work が利用者から書けなくなる。
+  owner=$(stat -c '%U:%G' "$repo")
   mkdir -p "$work"
+  chown "$owner" "$repo/.work" "$work"
 
   if [ ! -f "$work/$tarball" ]; then
     note "取得する: $url"
@@ -215,7 +257,8 @@ install_nix() {
 
   # NIX_INSTALLER_YES で確認のプロンプトを省く。
   NIX_INSTALLER_YES=1 "$work/nix-${NIX_VERSION}-x86_64-linux/install" --daemon
-  note "Nix を導入した"
+  chown -R "$owner" "$work"
+  note "Nix を導入した (取得したものは $work に残る)"
 }
 
 enable_flakes() {
@@ -258,10 +301,10 @@ apply_nixos_system() {
   # NIX_CONFIG で補う。2 回目以降は nix/wsl.nix が同じ設定を持つ。
   expected=$(
     NIX_CONFIG=$NIX_FLAKE_CONF nix build --no-link --print-out-paths \
-      "$repo#nixosConfigurations.wsl.config.system.build.toplevel"
+      "$repo#nixosConfigurations.$flake_target.config.system.build.toplevel"
   )
 
-  if NIX_CONFIG=$NIX_FLAKE_CONF nixos-rebuild switch --flake "$repo#wsl"; then
+  if NIX_CONFIG=$NIX_FLAKE_CONF nixos-rebuild switch --flake "$repo#$flake_target"; then
     return
   fi
 
@@ -295,7 +338,7 @@ provision_system() {
   else
     step "$wsl_conf を構成する"
     merge_wsl_conf "$wsl_conf"
-    note "隔離の設定と既定ユーザー ($PROVISION_USER) を反映した"
+    note "隔離の設定と既定ユーザー ($provision_user) を反映した"
   fi
 
   if [ "$distro" = ubuntu ]; then
@@ -322,8 +365,8 @@ provision_system() {
 # --- 段: home ----------------------------------------------------------------
 
 provision_home() {
-  if [ "$(id -un)" != "$PROVISION_USER" ]; then
-    echo "エラー: 段 home は $PROVISION_USER で実行してください。" >&2
+  if [ "$(id -un)" != "$provision_user" ]; then
+    echo "エラー: 段 home は $provision_user で実行してください。" >&2
     exit 1
   fi
 

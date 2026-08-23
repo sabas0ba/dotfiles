@@ -105,6 +105,8 @@ WSL 本体は 2.4.4 以降が必要である (`.wsl` 形式を直接登録でき
 
 Ubuntu 側では `/etc/wsl.conf` を丸ごと上書きせず、自分が管理するキーだけを差し替える。イメージが出荷時に持つ設定 (`[boot] systemd` 等) を消すと以降の処理が成立しないため。この差し替えは [`scripts/test-wsl-conf.sh`](scripts/test-wsl-conf.sh) が検査する。
 
+`/mnt` の下にドライブ文字のディレクトリ (`/mnt/c` 等) が空のまま残ることがある。登録の直後、隔離が成立する前に WSL が作ったものであり、マウントはされていない。`make check` の隔離の検査はマウントの有無を見るため、これらの空ディレクトリは検出しない。
+
 隔離を解除する場合は、手元の `/etc/wsl.conf` を書き換えるのではなく、上記の定義を変更して commit する。NixOS では手元の変更は次の `make wsl-switch` で元に戻る。
 
 Windows のファイルを WSL から扱う必要が生じた場合は、隔離を解除するのではなく、対象を明示して個別に持ち込む。
@@ -119,6 +121,33 @@ powershell -ExecutionPolicy Bypass -File $HOME\repos\dotfiles\scripts\wsl-bootst
 ```
 
 これで `wsl -d NixOS` すれば使える状態になる。Ubuntu の経路は `-Distro ubuntu` を付ける。
+
+指定できる項目は以下である。既定のままで本リポジトリの環境が構築される。
+
+| 引数 | 既定 | 用途 |
+| --- | --- | --- |
+| `-Distro` | `nixos` | `nixos` または `ubuntu` |
+| `-Name` | イメージごとの既定 (`NixOS` / `Ubuntu-24.04`) | WSL に登録する名前 |
+| `-Location` | wsl の既定 | 仮想ディスクの配置先 |
+| `-RepoUrl` | 本リポジトリ | 取得するリポジトリ。配置先のディレクトリ名は URL から導く |
+| `-Ref` | `main` | 取得する ref |
+| `-User` | `nixos` | WSL 上の利用者 |
+| `-FlakeTarget` | `wsl` | 適用する `nixosConfigurations` の名前 |
+| `-Unregister` | — | 登録を解除する |
+
+### 改変版を併存させる
+
+同じ環境の改変版を、既存の環境とは別のディストリビューションとして登録できる。登録名 (`-Name`) に加えて、リポジトリと、その中で参照する対象を分ける。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
+  -Name NixOS-alt -RepoUrl https://github.com/example/dotfiles-alt.git `
+  -User alt -FlakeTarget wsl-alt
+```
+
+改変版のリポジトリ側には、`-User` と同名の対象が `flake.nix` の `homeTargets` に、`-FlakeTarget` と同名の対象が `nixosConfigurations` に必要である。利用者を分けるのは、ホームディレクトリの構成が対象ごとに異なりうるためである。同一で構わない場合は `-User` を省略してよい。
+
+配布イメージは `.work/wsl` で共有する。同じ経路の 2 つ目以降は取得が発生しない。
 
 スクリプトが行う手順は以下である。
 
@@ -161,6 +190,8 @@ make wsl-dry        # system の適用内容の確認
 make wsl-switch     # system の構成を適用する (NixOS のみ)
 make wsl-isolation  # 隔離の検査のみ
 ```
+
+`make wsl-switch` および provision からの `nixos-rebuild` は、systemd の user unit の再読込に失敗して警告を出す。WSL では対話セッションの外に user session が存在しないためであり、system 側の切り替えには影響しない。provision は終了コードではなく `/run/current-system` が入れ替わったかどうかで成否を判断する。
 
 `scripts/wsl-provision.sh` は単独でも再実行できる。構築が途中で失敗した場合や、構成を変更したあとに使う。
 

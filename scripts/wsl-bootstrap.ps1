@@ -48,6 +48,16 @@ WSL に登録する名前。既定はディストリビューションごとの�
 .PARAMETER Ref
 取得するリポジトリの ref。既定は main。
 
+.PARAMETER RepoUrl
+取得するリポジトリ。既定は本リポジトリ。改変版をフォークとして持つ場合に指定する。
+WSL 上の配置先のディレクトリ名は URL から導く。
+
+.PARAMETER User
+WSL 上の利用者。既定は nixos。flake.nix の homeTargets に同名の対象が必要である。
+
+.PARAMETER FlakeTarget
+適用する nixosConfigurations の名前。既定は wsl。NixOS 経路でのみ使用する。
+
 .PARAMETER Unregister
 登録を解除する。仮想ディスクごと削除される。取得済みのイメージは残る。
 
@@ -56,6 +66,13 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro ubuntu
+
+.EXAMPLE
+同じ環境の改変版を、既存の環境と併存させる。
+
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
+  -Name NixOS-alt -RepoUrl https://github.com/example/dotfiles-alt.git `
+  -User alt -FlakeTarget wsl-alt
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Unregister -Name NixOS
@@ -72,6 +89,12 @@ param(
 
   [string]$Ref = 'main',
 
+  [string]$RepoUrl = 'https://github.com/sabas0ba/dotfiles.git',
+
+  [string]$User = 'nixos',
+
+  [string]$FlakeTarget = 'wsl',
+
   [switch]$Unregister
 )
 
@@ -84,12 +107,11 @@ $ProgressPreference = 'SilentlyContinue'
 # Windows PowerShell 5.1 では既定のプロトコルが古い場合がある。
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-# WSL 上の利用者。scripts/wsl-provision.sh の PROVISION_USER と一致させる。
-$User = 'nixos'
-
-$RepoUrl = 'https://github.com/sabas0ba/dotfiles.git'
+# リポジトリの配置先。ディレクトリ名は URL から導く。改変版をフォークとして持つ場合に
+# 名前が衝突しないようにするため。
 $RepoParent = "/home/$User/repos"
-$RepoPath = "$RepoParent/dotfiles"
+$RepoDir = [IO.Path]::GetFileNameWithoutExtension($RepoUrl)
+$RepoPath = "$RepoParent/$RepoDir"
 
 # --- 固定した配布イメージ ----------------------------------------------------
 #
@@ -294,7 +316,8 @@ else {
 Write-Host '  構成    provision の段 system を実行する'
 Invoke-Wsl -Arguments @(
   '-d', $Name, '-u', 'root', '--',
-  'sh', '-lc', "$RepoPath/scripts/wsl-provision.sh system $Distro"
+  'sh', '-lc',
+  "$RepoPath/scripts/wsl-provision.sh system $Distro --user $User --flake-target $FlakeTarget"
 )
 
 # --- 5. 反映のための停止 ---
@@ -307,7 +330,8 @@ Invoke-Wsl -Arguments @('--terminate', $Name)
 Write-Host '  構成    provision の段 home を実行する'
 Invoke-Wsl -Arguments @(
   '-d', $Name, '-u', $User, '--',
-  'sh', '-lc', "$RepoPath/scripts/wsl-provision.sh home $Distro"
+  'sh', '-lc',
+  "$RepoPath/scripts/wsl-provision.sh home $Distro --user $User --flake-target $FlakeTarget"
 )
 
 Write-Host ''

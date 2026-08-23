@@ -39,7 +39,7 @@ check_case() {
     printf '%s' "$input" >"$path"
   fi
 
-  bash "$provision" wslconf nixos "$path"
+  bash "$provision" wslconf nixos --wsl-conf "$path"
   actual=$(cat "$path")
 
   if [ "$actual" = "$expected" ]; then
@@ -61,9 +61,9 @@ check_idempotent() {
   path="$work/case-$case_number.conf"
   printf '%s' "$input" >"$path"
 
-  bash "$provision" wslconf nixos "$path"
+  bash "$provision" wslconf nixos --wsl-conf "$path"
   first=$(cat "$path")
-  bash "$provision" wslconf nixos "$path"
+  bash "$provision" wslconf nixos --wsl-conf "$path"
   second=$(cat "$path")
 
   if [ "$first" = "$second" ]; then
@@ -140,6 +140,20 @@ root = /windows
 '
 
 check_idempotent '二度適用しても変わらない (空のファイル)' ''
+
+# --user が [user] default に反映されること。同じ環境の改変版を併存させる際に、
+# 利用者を分けられることが要件である。
+case_number=$((case_number + 1))
+user_case="$work/case-$case_number.conf"
+bash "$provision" wslconf nixos --user modified --wsl-conf "$user_case"
+
+if grep -qxF 'default = modified' "$user_case"; then
+  printf '  ok      --user が既定ユーザーに反映される\n'
+else
+  printf '  NG      --user が既定ユーザーに反映されない\n'
+  failures=$((failures + 1))
+  cat "$user_case"
+fi
 
 echo
 
