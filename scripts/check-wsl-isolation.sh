@@ -156,8 +156,10 @@ echo
 if [ "$errors" -ne 0 ]; then
   echo "WSL の隔離が成立していません ($errors 件)。" >&2
   echo "NixOS では nix/wsl.nix の wsl.wslConf / wsl.interop を確認し、" >&2
-  echo "make wsl-switch を実行してから WSL を再起動してください (wsl.exe --shutdown)。" >&2
-  echo "他のディストリビューションでは /etc/wsl.conf を確認してください。" >&2
+  echo "make wsl-switch を実行してください。他のディストリビューションでは" >&2
+  echo "/etc/wsl.conf を確認してください。" >&2
+  echo "いずれも Windows 側で wsl.exe --terminate ${WSL_DISTRO_NAME:-<名前>} を" >&2
+  echo "実行して再起動するまで反映されません。" >&2
   exit 1
 fi
 

@@ -141,7 +141,8 @@ wsl-dry: ## 適用内容を表示する (実際には適用しない)
 .PHONY: wsl-switch
 wsl-switch: ## WSL 上の NixOS に構成を適用する
 	@echo "system の構成を置き換える。先に make wsl-dry で内容を確認すること。"
-	@echo "隔離の設定 (/etc/wsl.conf) は再起動後に反映される: wsl.exe --shutdown"
+	@echo "隔離の設定 (/etc/wsl.conf) は再起動後に反映される。Windows 側で"
+	@echo "wsl.exe --terminate <ディストリビューション名> を実行すること。"
 	sudo nixos-rebuild switch --flake '.#$(WSL_TARGET)'
 
 .PHONY: wsl-isolation

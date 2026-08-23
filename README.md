@@ -149,11 +149,13 @@ sudo env NIX_CONFIG='experimental-features = nix-command flakes' \
 `make wsl-switch` を使う。sudo はパスワードを要求しない (NixOS-WSL が既定ユーザーに
 対し `security.sudo.wheelNeedsPassword = false` を設定している)。
 
-適用後、`/etc/wsl.conf` の反映のために一度停止する。Windows 側で実行する。
+適用後、`/etc/wsl.conf` の反映のために当該ディストリビューションを一度停止する。Windows 側で実行する。
 
 ```powershell
-wsl --shutdown
+wsl --terminate NixOS
 ```
+
+`wsl --shutdown` は他のディストリビューションも停止させる。`/etc/wsl.conf` はディストリビューションの起動時に読まれるため、`--terminate` で足りる。
 
 以降は他の Linux 環境と同一である。
 
