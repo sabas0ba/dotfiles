@@ -11,6 +11,12 @@ name: Pages
 on:
   push:
     branches: [main]
+  # サイトが生成できることを PR の時点で確認する。配置は行わない。main への push
+  # まで検証が無いと、生成の失敗が公開の直前に現れる。
+  pull_request:
+    paths:
+      - docs/**
+      - .github/workflows/pages.yml
   # 内容を変えずに再公開したい場合に使う。
   workflow_dispatch:
 
@@ -21,9 +27,11 @@ permissions:
   id-token: write
 
 # 配置は同時に 1 つとする。実行中のものは打ち切らない。打ち切ると公開されている内容が
-# 中途半端な状態で残りうるため。
+# 中途半端な状態で残りうるため。ref ごとに分けているのは、PR の生成確認が main の
+# 配置を待たせないようにするためである。配置を行う ref は main のみであり、
+# 配置どうしは従来どおり直列となる。
 concurrency:
-  group: pages
+  group: pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -35,6 +43,9 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Pages の設定を取得する
+        # PR では配置しないため取得しない。fork からの PR にはそもそも当該 API を
+        # 呼ぶ権限が無く、実行すると生成の確認自体ができなくなる。
+        if: github.event_name != 'pull_request'
         # actions/configure-pages v5
         #
         # 引数は与えない。static_site_generator と generator_config_file による
@@ -53,6 +64,7 @@ jobs:
           destination: ./_site
 
       - name: 成果物を登録する
+        if: github.event_name != 'pull_request'
         # actions/upload-pages-artifact v3
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa
         with:
@@ -60,6 +72,7 @@ jobs:
 
   deploy:
     needs: build
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
     environment:
       name: github-pages

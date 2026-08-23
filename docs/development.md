@@ -27,7 +27,11 @@ CLAUDE.md                Claude Code 向けの補足
 
 `ci.yml` はイメージを構築し、`--network none` のコンテナ内で `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査はコンテナ内で行う。push (main) と pull request で自動実行する。
 
-`pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で動く。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
+`pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で配置し、`docs/` を変更する pull request では生成のみを行う (配置はしない)。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
+
+見た目は外部のテーマに依存せず、`docs/_layouts/default.html` と `docs/assets/css/style.css` で完結させる。テーマは版を固定できず、上流の変更がそのまま公開物に及ぶためである。配色は CSS の変数で定義し、OS の設定 (`prefers-color-scheme`) と利用者の選択 (`data-theme`) の双方で切り替える。色を規則に直接書くと片方の配色にしか反映されない指定が混ざるため、変数を経由する。
+
+ページを追加した場合は、ヘッダの導線となる `docs/_config.yml` の `nav` にも追記する。
 
 公開を開始するには、リポジトリの Settings → Pages で Source を「GitHub Actions」にする操作が一度だけ必要である。`actions/configure-pages` の `enablement` でワークフローから有効化することもできるが、CI がリポジトリの設定を変更することになるため採っていない。
 

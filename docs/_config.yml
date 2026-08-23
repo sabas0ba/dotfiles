@@ -9,12 +9,43 @@
 baseurl: "/dotfiles"
 title: dotfiles
 description: Nix と direnv による再現性のある開発環境
-theme: jekyll-theme-primer
+
+# 文書は日本語である。既定値 (en-US) のままでは、読み上げと自動翻訳の判定を誤る。
+lang: ja
+
+# 外部のテーマを使用しない。見た目は _layouts/ と assets/ で完結させる。
+#
+# テーマは版を固定できず、上流の変更が見た目に直接及ぶ。加えて
+# jekyll-theme-primer はサイト名を各ページの h1 として注入し (見出しが 2 つになる)、
+# 編集リンクの宛先を docs/ の外に向け、閲覧のたびに第三者の CDN から
+# JavaScript を読み込んでいた。いずれも自前のレイアウトでは生じない。
+
+# ヘッダに並べるページ。index.md の目次とは別に、どのページからでも移動できる
+# ようにするためのもの。ページを増やした場合はここにも追記する。
+nav:
+  - title: セットアップ
+    url: /setup.html
+  - title: Windows (WSL)
+    url: /windows.html
+  - title: 使い方
+    url: /usage.html
+  - title: 再現性
+    url: /reproducibility.html
+  - title: 開発
+    url: /development.html
+
+# フッタのリンク先。site.github (jekyll-github-metadata) は参照しない。
+# 値が生成環境に依存せず、手元でも同じ結果になるようにするため。
+repo_url: https://github.com/sabas0ba/dotfiles
 
 # 相対リンクの .md を出力先の .html に書き換える。同じ記述で GitHub 上の閲覧と
 # 公開したサイトの双方が成立するようにするため。
+#
+# jekyll-seo-tag は _layouts/default.html の {% seo %} が使用する。GitHub Pages が
+# 既定で有効にしているが、要求していることが分かるよう明示する。
 plugins:
   - jekyll-relative-links
+  - jekyll-seo-tag
 
 relative_links:
   enabled: true
