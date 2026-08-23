@@ -1,0 +1,20 @@
+# GitHub Pages の設定。公開の対象は docs/ 以下のみである。
+#
+# baseurl は書かない。プロジェクトのサイトの URL はリポジトリ名に依存するため、
+# .github/workflows/pages.yml の actions/configure-pages が実行時に注入する。
+title: dotfiles
+description: Nix と direnv による再現性のある開発環境
+theme: jekyll-theme-primer
+
+# 相対リンクの .md を出力先の .html に書き換える。同じ記述で GitHub 上の閲覧と
+# 公開したサイトの双方が成立するようにするため。
+plugins:
+  - jekyll-relative-links
+
+relative_links:
+  enabled: true
+  collections: false
+
+exclude:
+  - Gemfile
+  - Gemfile.lock

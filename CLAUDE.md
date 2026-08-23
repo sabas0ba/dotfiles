@@ -3,8 +3,11 @@
 Claude Code が本リポジトリで作業する際の補足。
 
 本リポジトリの規約 (構成、変更手順、コーディング規約、コミット、禁止事項) は
-[README.md](README.md) に定義してある。これらは人間の作業者にも同様に適用されるため、
-本ファイルには重複して記述しない。README.md を参照すること。
+[docs/development.md](docs/development.md) に定義してある。これらは人間の作業者にも
+同様に適用されるため、本ファイルには重複して記述しない。当該ページを参照すること。
+
+利用者向けの文書は `docs/` にあり、そのまま GitHub Pages で公開している。`README.md`
+は概要と導線のみを持つ。内容を追記する場合は `docs/` を変更する。
 
 利用者全体の共通規約は `home/.claude/CLAUDE.md` (配置先 `~/.claude/CLAUDE.md`) に
 ある。
@@ -42,8 +45,8 @@ scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
 ## WSL の隔離
 
 WSL 上の環境は Windows 側から隔離してある (`/mnt` へのマウント、PATH の流入、
-Windows の実行ファイルの起動をいずれも無効化)。目的と定義箇所は README の
-[Windows 側からの隔離](README.md#windows-側からの隔離) にある。
+Windows の実行ファイルの起動をいずれも無効化)。目的と定義箇所は
+[docs/windows.md](docs/windows.md#windows-側からの隔離) にある。
 
 この設定を弱める変更を、作業を進めるために行わない。Windows 側のファイルが必要に
 なった場合は、隔離を解除せず、対象を提示して指示を仰ぐ。`/etc/wsl.conf` を手元で

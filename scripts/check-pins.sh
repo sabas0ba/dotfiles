@@ -3,7 +3,7 @@
 # 外部の成果物が一意に固定されているかを検査する。
 #
 # 本リポジトリは、タグやブランチ名のみによる参照を固定とみなさない。タグは再割り当てが
-# 可能であり、同じ参照が別の内容を指しうるため。固定の方針は README の「再現性」にある。
+# 可能であり、同じ参照が別の内容を指しうるため。固定の方針は docs/reproducibility.md にある。
 #
 # flake の入力 (nixpkgs / home-manager) は scripts/check-lock.sh が担当する。本
 # スクリプトはそれ以外を対象とする。
@@ -127,41 +127,46 @@ fi
 
 # --- Nix インストーラ --------------------------------------------------------
 #
-# README の導入手順は、バージョンを固定し、固定した sha256 で検証する。
+# 導入手順 (docs/setup.md) は、バージョンを固定し、固定した sha256 で検証する。
 # バージョンは Dockerfile のベースイメージと一致させる。
 
-readme="$root/README.md"
+setup_doc="$root/docs/setup.md"
+
+if [ ! -f "$setup_doc" ]; then
+  fail "docs/setup.md が存在しません"
+  setup_doc=/dev/null
+fi
 
 dockerfile_nix_version=$(
   grep -oE '^ARG NIX_VERSION=[^[:space:]]+' "$root/Dockerfile" |
     head -1 | cut -d= -f2
 )
 
-readme_nix_version=$(
-  grep -oE '^NIX_VERSION=[^[:space:]]+' "$readme" |
+doc_nix_version=$(
+  grep -oE '^NIX_VERSION=[^[:space:]]+' "$setup_doc" |
     head -1 | cut -d= -f2
 )
 
-if [ -z "$dockerfile_nix_version" ] || [ -z "$readme_nix_version" ]; then
-  fail "NIX_VERSION を Dockerfile または README から読み取れません"
-elif [ "$dockerfile_nix_version" != "$readme_nix_version" ]; then
-  fail "NIX_VERSION が不一致: Dockerfile=$dockerfile_nix_version README=$readme_nix_version"
+if [ -z "$dockerfile_nix_version" ] || [ -z "$doc_nix_version" ]; then
+  fail "NIX_VERSION を Dockerfile または docs/setup.md から読み取れません"
+elif [ "$dockerfile_nix_version" != "$doc_nix_version" ]; then
+  fail "NIX_VERSION が不一致: Dockerfile=$dockerfile_nix_version docs/setup.md=$doc_nix_version"
 else
-  ok "NIX_VERSION が Dockerfile と README で一致している ($dockerfile_nix_version)"
+  ok "NIX_VERSION が Dockerfile と docs/setup.md で一致している ($dockerfile_nix_version)"
 fi
 
-readme_nix_sha256=$(
-  grep -oE '^NIX_SHA256=[0-9a-f]{64}$' "$readme" |
+doc_nix_sha256=$(
+  grep -oE '^NIX_SHA256=[0-9a-f]{64}$' "$setup_doc" |
     head -1 | cut -d= -f2
 )
 
-if [ -n "$readme_nix_sha256" ]; then
-  ok "Nix インストーラの sha256 が README に固定されている"
+if [ -n "$doc_nix_sha256" ]; then
+  ok "Nix インストーラの sha256 が docs/setup.md に固定されている"
 else
-  fail "README に固定した NIX_SHA256 (64 桁) がありません"
+  fail "docs/setup.md に固定した NIX_SHA256 (64 桁) がありません"
 fi
 
-# Ubuntu 経路の provision も同じ配布物を導入する。README と値が食い違うと、経路に
+# Ubuntu 経路の provision も同じ配布物を導入する。docs/setup.md と値が食い違うと、経路に
 # よって異なる版が入る。同一であることを検査する。
 provision="$root/scripts/wsl-provision.sh"
 
@@ -179,18 +184,18 @@ else
 
   if [ -z "$provision_nix_version" ] || [ -z "$provision_nix_sha256" ]; then
     fail "scripts/wsl-provision.sh から NIX_VERSION / NIX_SHA256 を読み取れません"
-  elif [ "$provision_nix_version" != "$readme_nix_version" ]; then
-    fail "NIX_VERSION が不一致: wsl-provision.sh=$provision_nix_version README=$readme_nix_version"
-  elif [ "$provision_nix_sha256" != "$readme_nix_sha256" ]; then
-    fail "NIX_SHA256 が wsl-provision.sh と README で一致しません"
+  elif [ "$provision_nix_version" != "$doc_nix_version" ]; then
+    fail "NIX_VERSION が不一致: wsl-provision.sh=$provision_nix_version docs/setup.md=$doc_nix_version"
+  elif [ "$provision_nix_sha256" != "$doc_nix_sha256" ]; then
+    fail "NIX_SHA256 が wsl-provision.sh と docs/setup.md で一致しません"
   else
-    ok "Nix インストーラの固定が wsl-provision.sh と README で一致している"
+    ok "Nix インストーラの固定が wsl-provision.sh と docs/setup.md で一致している"
   fi
 fi
 
 # 配布元から取得したチェックサムとの照合は検証にならないため、手順に含めない。
-if grep -qE 'curl[^|]*\.sha256' "$readme"; then
-  fail "README が配布元から取得した sha256 と照合しています (検証になりません)"
+if grep -qE 'curl[^|]*\.sha256' "$setup_doc"; then
+  fail "docs/setup.md が配布元から取得した sha256 と照合しています (検証になりません)"
 fi
 
 # --- WSL の配布イメージ --------------------------------------------------------
@@ -242,7 +247,7 @@ echo
 
 if [ "$errors" -ne 0 ]; then
   echo "固定されていない参照があります ($errors 件)。" >&2
-  echo "README の「再現性」を参照し、ダイジェストまたはコミット SHA で固定してください。" >&2
+  echo "docs/reproducibility.md を参照し、ダイジェストまたはコミット SHA で固定してください。" >&2
   exit 1
 fi
 
