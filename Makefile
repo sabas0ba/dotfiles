@@ -40,6 +40,16 @@ bump: ## nixpkgs の rev を更新する (make bump REV=<40 桁の rev>)
 	scripts/update-pins.sh nixpkgs $(REV)
 	$(NIX) flake update
 
+.PHONY: bump-wsl
+bump-wsl: ## NixOS-WSL の rev を更新する (make bump-wsl REV=<40 桁の rev>)
+	@test -n "$(REV)" || { \
+		echo "使用方法: make bump-wsl REV=<NixOS-WSL の rev>"; \
+		echo "  release-26.05 上のタグが指すコミット SHA を指定する"; \
+		exit 1; \
+	}
+	scripts/update-pins.sh nixos-wsl $(REV)
+	$(NIX) flake update
+
 .PHONY: bump-hm
 bump-hm: ## home-manager の rev を更新する (make bump-hm REV=<40 桁の rev>)
 	@test -n "$(REV)" || { \
@@ -107,6 +117,36 @@ hm-switch: ## ホームディレクトリへ配置する
 	@out="$$($(NIX) build --no-link --print-out-paths \
 		'.#homeConfigurations.$(HM_TARGET).activationPackage')"; \
 	$(HM_ACTIVATE_ENV) "$$out/activate"
+
+# --- WSL 上の NixOS ---------------------------------------------------------
+#
+# WSL に NixOS を導入する経路でのみ使用する。Windows 側での登録は
+# scripts/wsl-bootstrap.ps1 が行う。手順は README の「Windows (WSL)」を参照する。
+#
+# nixos-rebuild は system の profile を書き換えるため root 権限を要する。sudo を
+# Makefile 側に書いているのは、対象が system であることを操作の名前から分かるように
+# するためである。
+
+WSL_TARGET ?= wsl
+
+.PHONY: wsl-build
+wsl-build: ## WSL 用の NixOS 構成を構築する (適用は行わない)
+	$(NIX) build --no-link --print-out-paths \
+		'.#nixosConfigurations.$(WSL_TARGET).config.system.build.toplevel'
+
+.PHONY: wsl-dry
+wsl-dry: ## 適用内容を表示する (実際には適用しない)
+	sudo nixos-rebuild dry-activate --flake '.#$(WSL_TARGET)'
+
+.PHONY: wsl-switch
+wsl-switch: ## WSL 上の NixOS に構成を適用する
+	@echo "system の構成を置き換える。先に make wsl-dry で内容を確認すること。"
+	@echo "隔離の設定 (/etc/wsl.conf) は再起動後に反映される: wsl.exe --shutdown"
+	sudo nixos-rebuild switch --flake '.#$(WSL_TARGET)'
+
+.PHONY: wsl-isolation
+wsl-isolation: ## WSL が Windows 側から隔離されていることを検査する
+	scripts/check-wsl-isolation.sh
 
 # --- コンテナ側の環境 -------------------------------------------------------
 

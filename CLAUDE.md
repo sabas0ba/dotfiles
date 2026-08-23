@@ -27,6 +27,9 @@ scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
 以下は影響が利用者の環境に及ぶため、実行前に対象を提示し、承認を得ること。
 
 - `make hm-switch` によるホームディレクトリへの配置。先に `make hm-dry` の結果を提示する
+- `make wsl-switch` による WSL 上の NixOS への適用。先に `make wsl-dry` の結果を提示する
+- `scripts/wsl-bootstrap.ps1` の実行。WSL にディストリビューションを登録し、
+  利用者の Windows 環境を変更する
 - 依存の追加 (flake の入力、`nix/packages.nix` のパッケージ、GitHub Actions)。
   追加する場合はリビジョンまたはダイジェストで固定する
 
@@ -35,6 +38,23 @@ scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
 `nix/packages.nix` は開発シェル、`nix build` の profile、Docker イメージの 3 つから
 参照される。ツールの追加は本ファイルのみを編集する。`Dockerfile` にツール名を追記
 した場合、定義が重複し不整合が生じる。
+
+## WSL の隔離
+
+WSL 上の環境は Windows 側から隔離してある (`/mnt` へのマウント、PATH の流入、
+Windows の実行ファイルの起動をいずれも無効化)。目的と定義箇所は README の
+[Windows 側からの隔離](README.md#windows-側からの隔離) にある。
+
+この設定を弱める変更を、作業を進めるために行わない。Windows 側のファイルが必要に
+なった場合は、隔離を解除せず、対象を提示して指示を仰ぐ。`/etc/wsl.conf` を手元で
+書き換えることも行わない (NixOS では次の switch で戻り、変更が記録されないため)。
+
+## PowerShell スクリプト
+
+`scripts/wsl-bootstrap.ps1` は `make lint` の対象外である。静的解析器
+(PSScriptAnalyzer) を導入すると依存が増えるため、意図的に入れていない。したがって
+本ファイルを変更した場合、機械的な検査は `scripts/check-pins.sh` による固定の確認
+のみとなる。変更は小さく保ち、内容を提示して確認を得ること。
 
 ## 変更後の検証
 

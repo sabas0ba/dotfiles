@@ -161,6 +161,40 @@ if grep -qE 'curl[^|]*\.sha256' "$readme"; then
   fail "README が配布元から取得した sha256 と照合しています (検証になりません)"
 fi
 
+# --- WSL の配布イメージ --------------------------------------------------------
+#
+# scripts/wsl-bootstrap.ps1 が取得するイメージは、URL と sha256 を本文に固定する。
+# 配布元の隣に置かれたチェックサムファイルは配布物と同時に差し替えられるため、
+# 実行時に取得して照合する方式は検証にならない。
+
+bootstrap="$root/scripts/wsl-bootstrap.ps1"
+
+if [ ! -f "$bootstrap" ]; then
+  fail "scripts/wsl-bootstrap.ps1 が存在しません"
+else
+  wsl_urls=$(grep -cE "^\s*Url\s*=\s*'https://[^']+'\s*$" "$bootstrap" || true)
+  wsl_urls_all=$(grep -cE "^\s*Url\s*=" "$bootstrap" || true)
+  wsl_hashes=$(grep -cE "^\s*Sha256\s*=\s*'[0-9a-f]{64}'\s*$" "$bootstrap" || true)
+  wsl_hashes_all=$(grep -cE "^\s*Sha256\s*=" "$bootstrap" || true)
+
+  if [ "$wsl_urls_all" -eq 0 ]; then
+    fail "scripts/wsl-bootstrap.ps1 に配布イメージの Url がありません"
+  elif [ "$wsl_urls" -ne "$wsl_urls_all" ]; then
+    fail "scripts/wsl-bootstrap.ps1 に https でない Url があります"
+  elif [ "$wsl_hashes" -ne "$wsl_hashes_all" ]; then
+    fail "scripts/wsl-bootstrap.ps1 に 64 桁でない Sha256 があります"
+  elif [ "$wsl_hashes" -ne "$wsl_urls" ]; then
+    fail "scripts/wsl-bootstrap.ps1 の Url と Sha256 の数が一致しません ($wsl_urls / $wsl_hashes)"
+  else
+    ok "WSL の配布イメージが URL と sha256 で固定されている ($wsl_urls 件)"
+  fi
+
+  # 配布元から取得したチェックサムとの照合になっていないこと。
+  if grep -qiE 'Invoke-WebRequest[^\n]*(\.sha256|SHA256SUMS)' "$bootstrap"; then
+    fail "scripts/wsl-bootstrap.ps1 が配布元から取得した sha256 と照合しています"
+  fi
+fi
+
 echo
 
 if [ "$errors" -ne 0 ]; then

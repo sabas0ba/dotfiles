@@ -15,6 +15,8 @@ Nix と direnv による再現性のある開発環境、および同一の定�
 - [direnv](https://direnv.net/) (任意。導入すると `cd` のみで環境に入る)
 - Docker (任意。コンテナ環境を使用する場合のみ)
 
+Windows 上で使用する場合は、先に [Windows (WSL)](#windows-wsl) の手順で WSL 内に Linux 環境を構築する。以降の手順はその内部で実行する。
+
 ### Nix の導入
 
 配布物をバージョン固定で取得し、チェックサムを検証してから展開する。インストーラを
@@ -74,6 +76,103 @@ direnv allow
 
 マシン固有の設定は `.envrc.local` に置く。git 管理外であり、`.envrc` から読み込まれる。
 
+## Windows (WSL)
+
+Windows 上では WSL の内部に Linux 環境を構築し、その中で上記のセットアップを行う。経路は 2 つあり、いずれも配布イメージをバージョンと sha256 で固定して取得する。
+
+| 経路 | system の管理 | flake の入力 | Nix の導入 |
+| --- | --- | --- | --- |
+| NixOS-WSL | `nix/wsl.nix` により宣言的 | `nixos-wsl` を使用 | 不要 (イメージに含まれる) |
+| Ubuntu LTS | 宣言的でない | 使用しない | [Nix の導入](#nix-の導入) の手順による |
+
+前者は system 層まで本リポジトリの管理下に入る。後者は入力を増やさずに済むが、WSL の設定は手作業の結果として残る。いずれの経路でも、開発シェル (`nix develop`) とホームディレクトリの構成 (`make hm-switch`) は他の環境と完全に同一の手順となる。
+
+WSL 本体は 2.4.4 以降が必要である (`.wsl` 形式を直接登録できる版)。`wsl --version` で確認し、古い場合は `wsl --update` を実行する。WSL 自体が未導入の場合は `wsl --install --no-distribution` で有効化する。
+
+### Windows 側からの隔離
+
+登録した環境は、既定の WSL とは異なり Windows 側から隔離した状態にする。
+
+- Windows のドライブを `/mnt` 以下にマウントしない
+- Windows の PATH を流入させない
+- Windows の実行ファイルを起動できるようにしない
+
+目的は、当環境で動作するエージェントやスクリプトが、ホスト側のシステムファイルや、認証済みの CLI (gh / az / aws / gcloud 等) に到達しないようにすることである。規約による禁止ではなく到達経路の遮断によって担保する。
+
+設定の実体は経路ごとに異なる。NixOS では [`nix/wsl.nix`](nix/wsl.nix) の `wsl.wslConf` および `wsl.interop` が宣言的に生成する。Ubuntu では `scripts/wsl-bootstrap.ps1` が登録の直後に `/etc/wsl.conf` を配置する。いずれの経路でも満たすべき結果は [`scripts/check-wsl-isolation.sh`](scripts/check-wsl-isolation.sh) が定義し、`make check` に含まれる。
+
+隔離を解除する場合は、手元の `/etc/wsl.conf` を書き換えるのではなく、上記の定義を変更して commit する。NixOS では手元の変更は次の `make wsl-switch` で元に戻る。
+
+Windows のファイルを WSL から扱う必要が生じた場合は、隔離を解除するのではなく、対象を明示して個別に持ち込む。
+
+### 登録
+
+PowerShell で実行する (管理者権限は不要)。イメージは `.work/wsl` に保存し、sha256 が一致する場合は再取得しない。中断した場合はそのまま再実行できる。
+
+```powershell
+git clone https://github.com/sabas0ba/dotfiles.git $HOME\repos\dotfiles
+cd $HOME\repos\dotfiles
+
+# NixOS-WSL の経路
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro nixos
+
+# Ubuntu の経路
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro ubuntu
+```
+
+スクリプトは、取得、sha256 の照合、`wsl --install --from-file` による登録、`/etc/wsl.conf` の配置、反映のための停止までを行う。取得元と sha256 はスクリプト本文に固定してあり、配布元の隣に置かれたチェックサムファイルとは照合しない (配布物と同時に差し替えられるため検証にならない)。
+
+登録に使用したイメージを破棄する場合は `.work/wsl` を削除する。環境そのものを作り直す場合は `wsl --unregister <名前>` を実行してから再度登録する。
+
+### NixOS-WSL の経路
+
+登録直後の既定ユーザーは `nixos` である。`flake.nix` の `homeTargets` に同名の対象を定義してあるため、以降 `HM_TARGET` を指定する必要はない。
+
+```bash
+wsl -d NixOS
+
+# 初回の rebuild を行う時点では、まだ本リポジトリの構成が適用されていないため
+# flakes が有効になっていない。この 1 回のみ NIX_CONFIG で補う。
+export NIX_CONFIG='experimental-features = nix-command flakes'
+
+nix-shell -p git --run 'git clone https://github.com/sabas0ba/dotfiles.git ~/repos/dotfiles'
+cd ~/repos/dotfiles
+
+make wsl-dry      # 適用内容の確認
+make wsl-switch   # system の構成を適用する
+```
+
+適用後、`/etc/wsl.conf` の反映のために一度停止する。Windows 側で実行する。
+
+```powershell
+wsl --shutdown
+```
+
+以降は他の Linux 環境と同一である。
+
+```bash
+wsl -d NixOS
+cd ~/repos/dotfiles
+nix develop
+make check        # 開発環境と WSL の隔離を検査する
+make hm-dry       # ホームディレクトリへの配置内容の確認
+make hm-switch
+```
+
+### Ubuntu の経路
+
+登録直後の既定ユーザーは root である。`homeTargets` の対象を NixOS の経路と揃えるため、ユーザー `nixos` を作成する。
+
+```bash
+wsl -d Ubuntu-24.04
+
+adduser --disabled-password --gecos '' nixos
+usermod -aG sudo nixos
+printf '[user]\ndefault = nixos\n' >> /etc/wsl.conf
+```
+
+Windows 側で `wsl --terminate Ubuntu-24.04` を実行して反映させたのち、[Nix の導入](#nix-の導入) と [セットアップ](#セットアップ) の手順に進む。`/etc/wsl.conf` の隔離の設定は既に配置されているため、変更しない。
+
 ## 操作
 
 ```bash
@@ -124,7 +223,10 @@ darwin は `/Users/<name>`)。規則から外れる対象のみ `homeDirectory` 
 | 対象 | ホームディレクトリ | 用途 |
 | --- | --- | --- |
 | `sabas0ba` | `/home/sabas0ba` (導出) | 個人環境 |
+| `nixos` | `/home/nixos` (導出) | WSL 上の環境 ([Windows (WSL)](#windows-wsl) を参照) |
 | `root` | `/root` (明示) | Claude Code のリモート実行環境 (root で動作する) |
+
+`nixos` は NixOS-WSL の `wsl.defaultUser` の既定値である。改名すると初回の `nixos-rebuild` が完了するまで対象が存在しないことになるため、既定値のまま受け入れている。Ubuntu の経路でも同名で作成し、WSL 上の対象を 1 つに揃えている。
 
 Claude Code のリモート実行環境では、`~/.gitconfig` をセッション側が管理しており、
 コミット署名やプロキシ経由の URL 書き換えが設定されている。home-manager が生成するのは
@@ -135,7 +237,7 @@ Claude Code のリモート実行環境では、`~/.gitconfig` をセッショ�
 ファイルを個別に symlink する。`~/.claude` に home-manager の管理外のファイルが
 存在する場合でも、それらを置き換えない。
 
-`home/.claude/settings.json` は Claude Code の permission の既定値である。認証情報を含むファイルの読み出しと、認証済みの CLI の実行をそれぞれ deny / ask に置く。方針は `home/.claude/CLAUDE.md` の「実行環境と到達範囲」に記述してある。これは Claude Code がツールの実行前に行う検査であり、OS レベルの強制ではない。Bash から起動した子プロセスには及ばないため、到達経路そのものを断てる環境ではそちらを主たる担保とし、本設定はそれが使えない環境向けの補助と位置付ける。
+`home/.claude/settings.json` は Claude Code の permission の既定値である。認証情報を含むファイルの読み出しと、認証済みの CLI の実行をそれぞれ deny / ask に置く。方針は `home/.claude/CLAUDE.md` の「実行環境と到達範囲」に記述してある。これは Claude Code がツールの実行前に行う検査であり、OS レベルの強制ではない。Bash から起動した子プロセスには及ばないため、WSL では[隔離](#windows-側からの隔離)を主たる担保とし、本設定はそれが使えない環境 (Windows ネイティブ、Linux ホスト) 向けの補助と位置付ける。
 
 配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を用いる (プロジェクトの設定が利用者全体の設定より優先される)。
 
@@ -217,6 +319,17 @@ make bump-hm REV=<40 桁の rev>
 make check
 ```
 
+### NixOS-WSL を更新する
+
+nixpkgs と同様に rev で固定してある。`release-26.05` 上のタグが指すコミット SHA を指定し、`flake.nix` のコメントのタグ名も併せて更新する。
+
+```bash
+make bump-wsl REV=<40 桁の rev>
+make check
+```
+
+配布イメージ (`scripts/wsl-bootstrap.ps1`) とは別の固定である。両者は系列を揃えるが、前者は登録済みの環境には影響しない。
+
 ### ベースイメージ・Actions・インストーラを更新する
 
 これらは `flake.lock` の再生成を伴わないため、`scripts/update-pins.sh` を直接呼ぶ。
@@ -231,7 +344,16 @@ scripts/update-pins.sh action actions/checkout 11bd7190...
 
 # Nix インストーラ (releases.nixos.org の .sha256)
 scripts/update-pins.sh nix-installer 2.35.1 c3fe2977...
+
+# WSL の配布イメージ
+scripts/update-pins.sh wsl-image nixos 2605.7.2 https://.../nixos.wsl e7180ad5...
+scripts/update-pins.sh wsl-image ubuntu 24.04.4 https://.../ubuntu-...wsl 9b2f7730...
 ```
+
+WSL の配布イメージの値は以下から取得する。いずれも配布物と同じ場所に置かれたチェックサムファイルではないため、差し替えの検出になる。
+
+- NixOS-WSL: GitHub の releases に置かれた `nixos.wsl` と、GitHub API が返す当該アセットのダイジェスト
+- Ubuntu: Microsoft が配布する [`DistributionInfo.json`](https://raw.githubusercontent.com/microsoft/WSL/master/distributions/DistributionInfo.json) の `Amd64Url` (`Url` と `Sha256`)
 
 上流の最新版を自動で取得して書き換えることはしない。更新は意図的な操作であり、値は
 明示的に与える。与えた値は形式を検査したうえで書き込み、変更対象が見つからない場合は
@@ -317,6 +439,8 @@ make docker-check
 | --- | --- | --- |
 | nixpkgs | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
 | home-manager | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
+| NixOS-WSL | 40 桁の rev + `flake.lock` の narHash | `flake.nix` |
+| WSL の配布イメージ | バージョン + URL + sha256 | `scripts/wsl-bootstrap.ps1` |
 | ツール一式 | 上記 nixpkgs から解決 | `nix/packages.nix` |
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
@@ -353,6 +477,7 @@ flake 以外の参照は `scripts/check-pins.sh` が検査する。こちらも�
 - ワークフローの `runs-on` が `-latest` でないこと
 - README の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` と一致すること
 - README に固定した `NIX_SHA256` があり、配布元から取得した値との照合になっていないこと
+- `scripts/wsl-bootstrap.ps1` の配布イメージが https の URL と 64 桁の sha256 で固定されており、こちらも配布元から取得した値との照合になっていないこと
 
 いずれも「上流に新しい版があるか」は見ない。それは更新の判断であり、検査の対象では
 ないため。更新の手順は [開発](#開発) にある。
@@ -366,6 +491,7 @@ nix/packages.nix         ツールの一覧 (単一情報源)
 nix/devshell.nix         開発シェルの定義
 nix/checks.nix           nix flake check が実行する検査
 nix/home.nix             home-manager によるホームディレクトリの構成
+nix/wsl.nix              WSL 上の NixOS の system 構成 (Windows 側からの隔離を含む)
 .envrc                   direnv の設定
 Dockerfile               同一の flake からコンテナを構築する
 Makefile                 操作の入り口

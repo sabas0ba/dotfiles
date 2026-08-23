@@ -21,6 +21,28 @@
         "type": "github"
       }
     },
+    "nixos-wsl": {
+      "inputs": {
+        "flake-compat": [],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1780705040,
+        "narHash": "sha256-pVadZqLm8RJcwLuDzJm7d2KO6e+RHPpIa/2qdqtn+B4=",
+        "owner": "nix-community",
+        "repo": "NixOS-WSL",
+        "rev": "add6b01c7ca72240046b5d541a74845423f1ee35",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "NixOS-WSL",
+        "rev": "add6b01c7ca72240046b5d541a74845423f1ee35",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1784856561,
@@ -40,6 +62,7 @@
     "root": {
       "inputs": {
         "home-manager": "home-manager",
+        "nixos-wsl": "nixos-wsl",
         "nixpkgs": "nixpkgs"
       }
     }
