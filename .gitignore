@@ -12,6 +12,9 @@ result-*
 # 作業用の一時ファイル置き場。リポジトリ外部 (/tmp 等) ではなくここを使用する
 /.work/
 
+# Claude Code がセッションごとに書き込む設定。共有する設定は .claude/settings.json に置く
+/.claude/settings.local.json
+
 # エディタおよび OS が生成する一時ファイル
 *.swp
 .DS_Store

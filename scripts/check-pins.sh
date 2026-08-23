@@ -194,7 +194,7 @@ else
 fi
 
 # 導入を行う経路が固定を自分で持たないこと。複製された値は片方だけが更新されうる。
-for consumer in scripts/wsl-provision.sh; do
+for consumer in scripts/wsl-provision.sh scripts/cloud-setup.sh; do
   consumer_path="$root/$consumer"
 
   if [ ! -f "$consumer_path" ]; then

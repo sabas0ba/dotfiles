@@ -19,6 +19,7 @@ scripts/                 ヘルパースクリプト
 home/                    ホームディレクトリへ配置する生ファイル
 docs/                    本ドキュメント (GitHub Pages で公開する)
 .github/workflows/       CI と Pages の定義
+.claude/settings.json    Claude Code のフック定義 (クラウド環境の構成)
 CLAUDE.md                Claude Code 向けの補足
 .work/                   作業用の一時ファイル置き場 (git ignore 対象)
 ```
