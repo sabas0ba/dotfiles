@@ -166,32 +166,47 @@ else
   fail "docs/setup.md に固定した NIX_SHA256 (64 桁) がありません"
 fi
 
-# Ubuntu 経路の provision も同じ配布物を導入する。docs/setup.md と値が食い違うと、経路に
-# よって異なる版が入る。同一であることを検査する。
-provision="$root/scripts/wsl-provision.sh"
+# 導入を行うスクリプトは scripts/nix-pin.sh の値を使う。docs/setup.md と食い違うと、
+# 経路によって異なる版が入る。同一であることを検査する。
+pin_file="$root/scripts/nix-pin.sh"
 
-if [ ! -f "$provision" ]; then
-  fail "scripts/wsl-provision.sh が存在しません"
+if [ ! -f "$pin_file" ]; then
+  fail "scripts/nix-pin.sh が存在しません"
 else
-  provision_nix_version=$(
-    grep -oE '^readonly NIX_VERSION=[^[:space:]]+' "$provision" |
+  pin_nix_version=$(
+    grep -oE '^NIX_VERSION=[^[:space:]]+' "$pin_file" |
       head -1 | cut -d= -f2
   )
-  provision_nix_sha256=$(
-    grep -oE '^readonly NIX_SHA256=[0-9a-f]{64}$' "$provision" |
+  pin_nix_sha256=$(
+    grep -oE '^NIX_SHA256=[0-9a-f]{64}$' "$pin_file" |
       head -1 | cut -d= -f2
   )
 
-  if [ -z "$provision_nix_version" ] || [ -z "$provision_nix_sha256" ]; then
-    fail "scripts/wsl-provision.sh から NIX_VERSION / NIX_SHA256 を読み取れません"
-  elif [ "$provision_nix_version" != "$doc_nix_version" ]; then
-    fail "NIX_VERSION が不一致: wsl-provision.sh=$provision_nix_version docs/setup.md=$doc_nix_version"
-  elif [ "$provision_nix_sha256" != "$doc_nix_sha256" ]; then
-    fail "NIX_SHA256 が wsl-provision.sh と docs/setup.md で一致しません"
+  if [ -z "$pin_nix_version" ] || [ -z "$pin_nix_sha256" ]; then
+    fail "scripts/nix-pin.sh から NIX_VERSION / NIX_SHA256 を読み取れません"
+  elif [ "$pin_nix_version" != "$doc_nix_version" ]; then
+    fail "NIX_VERSION が不一致: nix-pin.sh=$pin_nix_version docs/setup.md=$doc_nix_version"
+  elif [ "$pin_nix_sha256" != "$doc_nix_sha256" ]; then
+    fail "NIX_SHA256 が nix-pin.sh と docs/setup.md で一致しません"
   else
-    ok "Nix インストーラの固定が wsl-provision.sh と docs/setup.md で一致している"
+    ok "Nix インストーラの固定が nix-pin.sh と docs/setup.md で一致している"
   fi
 fi
+
+# 導入を行う経路が固定を自分で持たないこと。複製された値は片方だけが更新されうる。
+for consumer in scripts/wsl-provision.sh; do
+  consumer_path="$root/$consumer"
+
+  if [ ! -f "$consumer_path" ]; then
+    fail "$consumer が存在しません"
+  elif grep -qE '^[[:space:]]*(readonly[[:space:]]+)?NIX_(VERSION|SHA256)=' "$consumer_path"; then
+    fail "$consumer が Nix の固定を複製しています (scripts/nix-pin.sh を参照すること)"
+  elif ! grep -qF 'nix-pin.sh' "$consumer_path"; then
+    fail "$consumer が scripts/nix-pin.sh を読み込んでいません"
+  else
+    ok "$consumer が scripts/nix-pin.sh を参照している"
+  fi
+done
 
 # 配布元から取得したチェックサムとの照合は検証にならないため、手順に含めない。
 if grep -qE 'curl[^|]*\.sha256' "$setup_doc"; then

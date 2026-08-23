@@ -20,13 +20,6 @@
 #   使用方法: scripts/wsl-provision.sh <段> <distro> [オプション]  (--help で一覧)
 set -euo pipefail
 
-# Ubuntu 経路で導入する Nix。README の「Nix の導入」と同一の値であること。
-# 一致は scripts/check-pins.sh が検査する。
-readonly NIX_VERSION=2.35.1
-readonly NIX_SHA256=c3fe29778acaa93b5095ee66e36f11ec7c6a284c40970a24cc83ac4f04809db3
-
-readonly NIX_FLAKE_CONF='experimental-features = nix-command flakes'
-
 usage() {
   cat <<'USAGE'
 使用方法: scripts/wsl-provision.sh <段> <distro> [オプション]
@@ -101,6 +94,11 @@ esac
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
 repo=$(cd "$script_dir/.." && pwd)
+
+# Ubuntu 経路で導入する Nix の版。定義は 1 か所に置き、ここでは複製しない
+# (scripts/cloud-setup.sh も同じファイルを参照する)。
+# shellcheck source=scripts/nix-pin.sh
+. "$script_dir/nix-pin.sh"
 
 step() {
   printf '\n== %s\n' "$1"
