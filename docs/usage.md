@@ -10,7 +10,7 @@ make lint          # 静的解析のみ
 make shell         # 開発シェルに入る (direnv 未使用時)
 ```
 
-作業は開発シェルの内部で行う。`DOTFILES_ENV` が `nix-develop` であれば内部であり、`scripts/check-env.sh` で確認できる。
+作業は開発シェルの内部で行う。`scripts/check-env.sh` が、必要なツールが揃っていることと、その実体が Nix の store にあることを検査する。開発シェルの内部であれば `DOTFILES_ENV` が `nix-develop` となり、同スクリプトの最後に表示される。
 
 ツールを開発シェルの外から導入しない。`apt install` / `brew install` / `npm install -g` / `pip install --user` は再現性を損なう。必要なツールは [`nix/packages.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/packages.nix) に追記して取得する。
 

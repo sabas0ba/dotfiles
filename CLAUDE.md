@@ -19,7 +19,7 @@ Claude Code が本リポジトリで作業する際の補足。
 作業は開発シェルの内部で行う。開始時に確認すること。
 
 ```bash
-scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
+scripts/check-env.sh   # ツールが揃い、その実体が Nix の store にあることを確認する
 ```
 
 開発シェルの外にいる場合は `nix develop` (direnv 導入済みであれば `direnv allow`)
