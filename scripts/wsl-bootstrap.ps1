@@ -308,7 +308,11 @@ if (Test-WslRegistered -DistroName $Name) {
   Write-Host "  ok      $Name は既に登録されている"
 }
 else {
-  $installArgs = @('--install', '--from-file', $imagePath, '--name', $Name)
+  # --no-launch を付ける。既定では登録の直後にディストリビューションを起動するが、
+  # Ubuntu の配布イメージはそこで OOBE (利用者名とパスワードの対話) を始める。
+  # 非対話の実行では入力が得られず、応答が返らないまま長時間ブロックする。
+  # 起動は以降の手順が明示的に行うため、ここでは不要である。
+  $installArgs = @('--install', '--from-file', $imagePath, '--name', $Name, '--no-launch')
   if ($Location) {
     $installArgs += @('--location', $Location)
   }
