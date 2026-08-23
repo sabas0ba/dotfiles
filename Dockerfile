@@ -57,12 +57,18 @@ COPY nix ./nix
 # 開発シェルを profile として実体化する。profile は GC ルートであるため、以降この
 # 閉包は削除されない。
 #
+# flake archive は、開発シェルが参照しない入力も含めてすべてを store に取り込む。
+# nix は評価に必要な入力しか取得しないため、これが無いと nixosConfigurations が
+# 参照する入力 (nixos-wsl) はイメージに入らず、`--network none` での
+# `nix flake check` が取得を試みて失敗する。イメージを自己完結させるために行う。
+#
 # あわせて名前 `nixpkgs` を、flake.lock で固定した nixpkgs 自身に解決させる。
 # コンテナ内の `nix shell nixpkgs#jq` 等が開発シェルと同一の nixpkgs を参照し、
 # ネットワークを必要としない。
 #
 # 末尾の rm は取得済み tarball の展開キャッシュの削除であり、store は変更しない。
 RUN nix develop --profile "$DOTFILES_PROFILE" --command true \
+  && nix flake archive --json > /dev/null \
   && nix registry add nixpkgs \
   "path:$(nix eval --raw --impure --expr '(builtins.getFlake "/workspace").inputs.nixpkgs.outPath')" \
   && rm -rf /root/.cache/nix

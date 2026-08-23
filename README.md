@@ -271,8 +271,12 @@ docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```
 
 ビルド時に開発シェルを Nix の profile として実体化しているため、起動は約 1 秒であり、
-ネットワークを必要としない。イメージは nixpkgs のソースを含むため、`--network none`
-のまま `make check` (`nix flake check`) が実行できる。
+ネットワークを必要としない。イメージは flake のすべての入力のソースを含むため、
+`--network none` のまま `make check` (`nix flake check`) が実行できる。
+
+入力の取り込みは `nix flake archive` で行っている。`nix develop` は評価に必要な入力しか
+取得しないため、開発シェルが参照しない入力 (`nixos-wsl`) はこれが無いとイメージに
+入らず、ネットワークの無い環境で `nix flake check` が失敗する。
 
 コンテナ内では名前 `nixpkgs` も `flake.lock` で固定した nixpkgs に解決される。以下は
 ネットワーク無しで動作し、開発シェルと同一の nixpkgs を参照する。
