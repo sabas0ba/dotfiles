@@ -203,6 +203,43 @@ function Test-WslRegistered {
   return ($names -contains $DistroName)
 }
 
+# wsl --terminate は停止の完了を待たずに戻る。直後に起動すると、停止しきっていない
+# 実体に接続することがあり、/etc/wsl.conf の変更 (隔離の設定) が反映されないまま次の
+# 段が動く。実際に一覧から消えるまで待つ。
+function Wait-WslStopped {
+  param(
+    [Parameter(Mandatory = $true)][string]$DistroName,
+    [int]$TimeoutSeconds = 60
+  )
+
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+
+  while ((Get-Date) -lt $deadline) {
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+      $running = & wsl.exe --list --running --quiet
+    }
+    finally {
+      $ErrorActionPreference = $previous
+    }
+
+    # 実行中のディストリビューションが 1 つも無い場合、wsl.exe は非零で終わる。
+    if ($LASTEXITCODE -ne 0) {
+      return
+    }
+
+    $names = $running -split "`r?`n" | ForEach-Object { ($_ -replace "`0", '').Trim() }
+    if ($names -notcontains $DistroName) {
+      return
+    }
+
+    Start-Sleep -Milliseconds 500
+  }
+
+  throw "$DistroName が $TimeoutSeconds 秒以内に停止しませんでした。"
+}
+
 function Get-PinnedImage {
   param(
     [Parameter(Mandatory = $true)][hashtable]$Image,
@@ -325,6 +362,7 @@ Invoke-Wsl -Arguments @(
 # 停止させるため使用しない。
 Write-Host "  再起動  $Name を停止して設定を反映する"
 Invoke-Wsl -Arguments @('--terminate', $Name)
+Wait-WslStopped -DistroName $Name
 
 # --- 6. 段 home ---
 Write-Host '  構成    provision の段 home を実行する'
