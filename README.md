@@ -27,6 +27,10 @@ powershell -ExecutionPolicy Bypass -File $HOME\repos\dotfiles\scripts\wsl-bootst
 
 詳細は [Windows (WSL)](docs/windows.md) を参照する。
 
+Claude Code のクラウド環境 ([claude.ai/code](https://claude.ai/code)):
+
+リポジトリを開くだけでよい。セッションの開始時に SessionStart フックが Nix の導入から開発シェルの構成までを行う。環境側に指定する設定は [セットアップ](docs/setup.md#claude-code-のクラウド環境) を参照する。
+
 ## ドキュメント
 
 - [セットアップ](docs/setup.md) — Nix の導入から開発シェルに入るまで

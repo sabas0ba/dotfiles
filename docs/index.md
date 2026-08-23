@@ -19,6 +19,7 @@ Nix と direnv による再現性のある開発環境。同じ定義からコ�
 | Linux / macOS | [セットアップ](setup.md) |
 | Windows | [Windows (WSL)](windows.md)。2 コマンドで完了する |
 | コンテナ | [使い方](usage.md#コンテナ環境) |
+| Claude Code (クラウド) | 自動。[セットアップ](setup.md#claude-code-のクラウド環境) |
 
 いずれの環境でも、開発シェルに入る操作 (`nix develop`) とホームディレクトリの構成 (`make hm-switch`) は同一である。
 

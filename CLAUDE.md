@@ -25,6 +25,12 @@ scripts/check-env.sh   # DOTFILES_ENV=nix-develop であれば開発シェル内
 開発シェルの外にいる場合は `nix develop` (direnv 導入済みであれば `direnv allow`)
 で入る。ツールを開発シェルの外から導入しない。
 
+Claude Code のクラウド環境では、SessionStart フック (`.claude/settings.json` が
+`scripts/cloud-setup.sh` を呼ぶ) がセッションの開始時に Nix の導入から開発シェルの
+構成までを行う。したがって上記の確認は最初から通る。通らない場合はフックが失敗して
+いるため、`scripts/cloud-setup.sh` を再実行して原因を確認する。構成の内容は
+[docs/setup.md](docs/setup.md#claude-code-のクラウド環境) にある。
+
 ## 確認を要する操作
 
 以下は影響が利用者の環境に及ぶため、実行前に対象を提示し、承認を得ること。

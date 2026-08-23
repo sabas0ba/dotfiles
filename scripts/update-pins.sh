@@ -21,7 +21,7 @@ usage() {
   nixos-wsl <rev>                  flake.nix の NixOS-WSL を更新する
   image <バージョン> <ダイジェスト>  Dockerfile のベースイメージを更新する
   action <owner/repo> <sha>        ワークフローの action を更新する
-  nix-installer <バージョン> <sha256> docs/setup.md の Nix 導入手順を更新する
+  nix-installer <バージョン> <sha256> Nix の導入手順と固定を更新する
   wsl-image <distro> <バージョン> <url> <sha256>
                                    WSL の配布イメージを更新する (distro: nixos | ubuntu)
 
@@ -215,14 +215,15 @@ case "$target" in
     replace_in_file docs/setup.md \
       "s|^NIX_SHA256=.*|NIX_SHA256=$2|" \
       "Nix インストーラの sha256"
-    # Ubuntu 経路の provision も同じ配布物を導入する。docs/setup.md と食い違うと経路に
-    # よって異なる版が入るため、同時に書き換える (一致は check-pins.sh が検査する)。
-    replace_in_file scripts/wsl-provision.sh \
-      "s|^readonly NIX_VERSION=.*|readonly NIX_VERSION=$1|" \
-      "provision の Nix のバージョン"
-    replace_in_file scripts/wsl-provision.sh \
-      "s|^readonly NIX_SHA256=.*|readonly NIX_SHA256=$2|" \
-      "provision の Nix の sha256"
+    # 導入を行うスクリプト (WSL の Ubuntu 経路、Claude Code のリモート実行環境) は
+    # scripts/nix-pin.sh を参照する。docs/setup.md と食い違うと経路によって異なる版が
+    # 入るため、同時に書き換える (一致は check-pins.sh が検査する)。
+    replace_in_file scripts/nix-pin.sh \
+      "s|^NIX_VERSION=.*|NIX_VERSION=$1|" \
+      "導入する Nix のバージョン"
+    replace_in_file scripts/nix-pin.sh \
+      "s|^NIX_SHA256=.*|NIX_SHA256=$2|" \
+      "導入する Nix の sha256"
     echo "Dockerfile の ARG NIX_VERSION も一致させること。"
     ;;
 
