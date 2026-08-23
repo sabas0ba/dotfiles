@@ -150,10 +150,42 @@ else
   ok "NIX_VERSION が Dockerfile と README で一致している ($dockerfile_nix_version)"
 fi
 
-if grep -qE '^NIX_SHA256=[0-9a-f]{64}$' "$readme"; then
+readme_nix_sha256=$(
+  grep -oE '^NIX_SHA256=[0-9a-f]{64}$' "$readme" |
+    head -1 | cut -d= -f2
+)
+
+if [ -n "$readme_nix_sha256" ]; then
   ok "Nix インストーラの sha256 が README に固定されている"
 else
   fail "README に固定した NIX_SHA256 (64 桁) がありません"
+fi
+
+# Ubuntu 経路の provision も同じ配布物を導入する。README と値が食い違うと、経路に
+# よって異なる版が入る。同一であることを検査する。
+provision="$root/scripts/wsl-provision.sh"
+
+if [ ! -f "$provision" ]; then
+  fail "scripts/wsl-provision.sh が存在しません"
+else
+  provision_nix_version=$(
+    grep -oE '^readonly NIX_VERSION=[^[:space:]]+' "$provision" |
+      head -1 | cut -d= -f2
+  )
+  provision_nix_sha256=$(
+    grep -oE '^readonly NIX_SHA256=[0-9a-f]{64}$' "$provision" |
+      head -1 | cut -d= -f2
+  )
+
+  if [ -z "$provision_nix_version" ] || [ -z "$provision_nix_sha256" ]; then
+    fail "scripts/wsl-provision.sh から NIX_VERSION / NIX_SHA256 を読み取れません"
+  elif [ "$provision_nix_version" != "$readme_nix_version" ]; then
+    fail "NIX_VERSION が不一致: wsl-provision.sh=$provision_nix_version README=$readme_nix_version"
+  elif [ "$provision_nix_sha256" != "$readme_nix_sha256" ]; then
+    fail "NIX_SHA256 が wsl-provision.sh と README で一致しません"
+  else
+    ok "Nix インストーラの固定が wsl-provision.sh と README で一致している"
+  fi
 fi
 
 # 配布元から取得したチェックサムとの照合は検証にならないため、手順に含めない。

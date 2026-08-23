@@ -215,6 +215,14 @@ case "$target" in
     replace_in_file README.md \
       "s|^NIX_SHA256=.*|NIX_SHA256=$2|" \
       "Nix インストーラの sha256"
+    # Ubuntu 経路の provision も同じ配布物を導入する。README と食い違うと経路に
+    # よって異なる版が入るため、同時に書き換える (一致は check-pins.sh が検査する)。
+    replace_in_file scripts/wsl-provision.sh \
+      "s|^readonly NIX_VERSION=.*|readonly NIX_VERSION=$1|" \
+      "provision の Nix のバージョン"
+    replace_in_file scripts/wsl-provision.sh \
+      "s|^readonly NIX_SHA256=.*|readonly NIX_SHA256=$2|" \
+      "provision の Nix の sha256"
     echo "Dockerfile の ARG NIX_VERSION も一致させること。"
     ;;
 

@@ -83,9 +83,9 @@ Windows 上では WSL の内部に Linux 環境を構築し、その中で上記
 | 経路 | system の管理 | flake の入力 | Nix の導入 |
 | --- | --- | --- | --- |
 | NixOS-WSL | `nix/wsl.nix` により宣言的 | `nixos-wsl` を使用 | 不要 (イメージに含まれる) |
-| Ubuntu LTS | 宣言的でない | 使用しない | [Nix の導入](#nix-の導入) の手順による |
+| Ubuntu LTS | 宣言的でない | 使用しない | provision が [Nix の導入](#nix-の導入) と同じ配布物を入れる |
 
-前者は system 層まで本リポジトリの管理下に入る。後者は入力を増やさずに済むが、WSL の設定は手作業の結果として残る。いずれの経路でも、開発シェル (`nix develop`) とホームディレクトリの構成 (`make hm-switch`) は他の環境と完全に同一の手順となる。
+前者は system 層まで本リポジトリの管理下に入る。後者は入力を増やさずに済むが、system の状態は構成ファイルから導かれるものではなく、スクリプトを適用した結果として残る。いずれの経路でも、開発シェル (`nix develop`) とホームディレクトリの構成 (`make hm-switch`) は他の環境と完全に同一の手順となる。
 
 WSL 本体は 2.4.4 以降が必要である (`.wsl` 形式を直接登録できる版)。`wsl --version` で確認し、古い場合は `wsl --update` を実行する。WSL 自体が未導入の場合は `wsl --install --no-distribution` で有効化する。
 
@@ -99,91 +99,80 @@ WSL 本体は 2.4.4 以降が必要である (`.wsl` 形式を直接登録でき
 
 目的は、当環境で動作するエージェントやスクリプトが、ホスト側のシステムファイルや、認証済みの CLI (gh / az / aws / gcloud 等) に到達しないようにすることである。規約による禁止ではなく到達経路の遮断によって担保する。
 
-設定の実体は経路ごとに異なる。NixOS では [`nix/wsl.nix`](nix/wsl.nix) の `wsl.wslConf` および `wsl.interop` が宣言的に生成する。Ubuntu では `scripts/wsl-bootstrap.ps1` が登録の直後に `/etc/wsl.conf` を配置する。いずれの経路でも満たすべき結果は [`scripts/check-wsl-isolation.sh`](scripts/check-wsl-isolation.sh) が定義し、`make check` に含まれる。
+設定の実体は 2 か所にある。`/etc/wsl.conf` は [`scripts/wsl-provision.sh`](scripts/wsl-provision.sh) が両経路で書く。NixOS ではさらに [`nix/wsl.nix`](nix/wsl.nix) の `wsl.wslConf` および `wsl.interop` が同じ内容を宣言的に生成し、`nixos-rebuild switch` のたびに再生成する。いずれの経路でも満たすべき結果は [`scripts/check-wsl-isolation.sh`](scripts/check-wsl-isolation.sh) が 1 か所で定義し、`make check` に含まれる。
+
+`/etc/wsl.conf` は丸ごと上書きせず、自分が管理するキーだけを差し替える。イメージが出荷時に持つ設定 (Ubuntu の `[boot] systemd` 等) を消すと以降の処理が成立しないため。
 
 隔離を解除する場合は、手元の `/etc/wsl.conf` を書き換えるのではなく、上記の定義を変更して commit する。NixOS では手元の変更は次の `make wsl-switch` で元に戻る。
 
 Windows のファイルを WSL から扱う必要が生じた場合は、隔離を解除するのではなく、対象を明示して個別に持ち込む。
 
-### 登録
+### 構築
 
-PowerShell で実行する (管理者権限は不要)。イメージは `.work/wsl` に保存し、sha256 が一致する場合は再取得しない。中断した場合はそのまま再実行できる。
+PowerShell で以下を実行する (管理者権限は不要)。
 
 ```powershell
 git clone https://github.com/sabas0ba/dotfiles.git $HOME\repos\dotfiles
-cd $HOME\repos\dotfiles
-
-# NixOS-WSL の経路
-powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro nixos
-
-# Ubuntu の経路
-powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro ubuntu
+powershell -ExecutionPolicy Bypass -File $HOME\repos\dotfiles\scripts\wsl-bootstrap.ps1
 ```
 
-スクリプトは、取得、sha256 の照合、`wsl --install --from-file` による登録、`/etc/wsl.conf` の配置、反映のための停止までを行う。取得元と sha256 はスクリプト本文に固定してあり、配布元の隣に置かれたチェックサムファイルとは照合しない (配布物と同時に差し替えられるため検証にならない)。
+これで `wsl -d NixOS` すれば使える状態になる。Ubuntu の経路は `-Distro ubuntu` を付ける。
 
-登録に使用したイメージを破棄する場合は `.work/wsl` を削除する。環境そのものを作り直す場合は `wsl --unregister <名前>` を実行してから再度登録する。
+スクリプトが行う手順は以下である。
 
-### NixOS-WSL の経路
+1. 配布イメージを取得し、固定した sha256 と照合する
+2. `wsl --install --from-file` で登録する
+3. 利用者 `nixos` を用意し、リポジトリを取得する
+4. [`scripts/wsl-provision.sh`](scripts/wsl-provision.sh) の段 system を root で実行する (`/etc/wsl.conf`、sudo、Nix、system の構成)
+5. 設定の反映のためディストリビューションを停止する
+6. `scripts/wsl-provision.sh` の段 home を利用者で実行する (`make check` と `make hm-switch`)
 
-登録直後の既定ユーザーは `nixos` である。`flake.nix` の `homeTargets` に同名の対象を定義してあるため、以降 `HM_TARGET` を指定する必要はない。
+段が 2 つに分かれているのは、`/etc/wsl.conf` がディストリビューションの起動時にしか読まれず、間に再起動を挟む必要があるためである。
+
+判断を伴う処理は `scripts/wsl-provision.sh` に置く。Windows 側の PowerShell は静的解析の対象外であるため、内容を最小限に保つ。`scripts/wsl-bootstrap.ps1` に残るのは、provision がまだ存在しない時点で必要となる呼び出し (利用者の作成とリポジトリの取得) だけである。
+
+各手順は既に済んでいれば飛ばす。中断した場合はそのまま再実行できる。イメージは `.work/wsl` に保存し、sha256 が一致する場合は再取得しない。取得元と sha256 はスクリプト本文に固定してあり、配布元の隣に置かれたチェックサムファイルとは照合しない (配布物と同時に差し替えられるため検証にならない)。
+
+登録を解除する場合は以下を実行する。仮想ディスクごと削除される。取得済みのイメージは `.work/wsl` に残るため、不要であれば併せて削除する。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Unregister
+```
+
+### 経路ごとの差
+
+| | NixOS-WSL | Ubuntu |
+| --- | --- | --- |
+| 登録直後の利用者 | `nixos` (イメージの既定) | root。bootstrap が `nixos` を作成する |
+| 段 system が行うこと | `/etc/wsl.conf`、`nixos-rebuild switch --flake .#wsl` | `/etc/wsl.conf`、sudo、Nix の導入 |
+| sudo | NixOS-WSL がパスワードを要求しない設定を持つ | provision が `/etc/sudoers.d/nixos` に NOPASSWD を置く |
+
+sudo にパスワードを設けないのは、WSL では `wsl.exe -u root` で無条件に root になれるため、パスワードが境界として機能しないことによる。NixOS-WSL の既定に揃えてある。
+
+隔離が成立する時点についても述べる。`/etc/wsl.conf` を書くのは段 system であり、それより前に動くのは利用者の作成とリポジトリの取得だけである。いずれも Windows 側を参照しないため、利用者が対話セッションに入る時点では隔離が成立している。
+
+### 構築後の操作
 
 ```bash
-wsl -d NixOS
-
-# 配布イメージに git が含まれない場合がある。nix-shell 経由で取得する。
-nix-shell -p git --run 'git clone https://github.com/sabas0ba/dotfiles.git ~/repos/dotfiles'
-cd ~/repos/dotfiles
-
-# 初回の rebuild を行う時点では本リポジトリの構成が未適用であり、flakes が有効に
-# なっていない。この 1 回のみ NIX_CONFIG で補う。sudo は環境変数を引き継がないため
-# env で与える (シェルで export しても root には渡らない)。
-sudo env NIX_CONFIG='experimental-features = nix-command flakes' \
-  nixos-rebuild dry-activate --flake '.#wsl'   # 適用内容の確認
-
-sudo env NIX_CONFIG='experimental-features = nix-command flakes' \
-  nixos-rebuild switch --flake '.#wsl'         # system の構成を適用する
+make wsl-dry        # system の適用内容の確認
+make wsl-switch     # system の構成を適用する (NixOS のみ)
+make wsl-isolation  # 隔離の検査のみ
 ```
 
-2 回目以降は構成側で flakes が有効になっているため、`make wsl-dry` および
-`make wsl-switch` を使う。sudo はパスワードを要求しない (NixOS-WSL が既定ユーザーに
-対し `security.sudo.wheelNeedsPassword = false` を設定している)。
+`scripts/wsl-provision.sh` は単独でも再実行できる。構築が途中で失敗した場合や、構成を変更したあとに使う。
 
-適用後、`/etc/wsl.conf` の反映のために当該ディストリビューションを一度停止する。Windows 側で実行する。
+```bash
+sudo scripts/wsl-provision.sh system nixos
+scripts/wsl-provision.sh home nixos
+```
+
+構築後は他の Linux 環境と同一である。ユーザー名が `nixos` であり `flake.nix` の `homeTargets` に同名の対象があるため、`HM_TARGET` を指定する必要はない。
+
+`/etc/wsl.conf` を変更したときは、当該ディストリビューションを一度停止して反映させる。`wsl --shutdown` は他のディストリビューションも停止させるため用いない。
 
 ```powershell
 wsl --terminate NixOS
 ```
-
-`wsl --shutdown` は他のディストリビューションも停止させる。`/etc/wsl.conf` はディストリビューションの起動時に読まれるため、`--terminate` で足りる。
-
-以降は他の Linux 環境と同一である。
-
-```bash
-wsl -d NixOS
-cd ~/repos/dotfiles
-nix develop
-make check        # 開発環境と WSL の隔離を検査する
-make hm-dry       # ホームディレクトリへの配置内容の確認
-make hm-switch
-```
-
-### Ubuntu の経路
-
-登録直後の既定ユーザーは root である。`homeTargets` の対象を NixOS の経路と揃えるため、ユーザー `nixos` を作成する。
-
-```bash
-wsl -d Ubuntu-24.04
-
-# パスワードを設定する。sudo が要求するため --disabled-password では作成しない。
-adduser nixos
-usermod -aG sudo nixos
-
-# bootstrap が配置した隔離の設定に、既定ユーザーの指定を追記する。
-printf '[user]\ndefault = nixos\n' >> /etc/wsl.conf
-```
-
-Windows 側で `wsl --terminate Ubuntu-24.04` を実行して反映させたのち、[Nix の導入](#nix-の導入) と [セットアップ](#セットアップ) の手順に進む。`/etc/wsl.conf` の隔離の設定は既に配置されているため、変更しない。
 
 ## 操作
 
@@ -461,7 +450,7 @@ make docker-check
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/ci.yml` |
 | CI ランナー | バージョン付きラベル (`ubuntu-24.04`) | `.github/workflows/ci.yml` |
-| Nix インストーラ | バージョン + sha256 | `README.md` |
+| Nix インストーラ | バージョン + sha256 | `README.md` および `scripts/wsl-provision.sh` |
 | ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
 
 `flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock`
@@ -493,6 +482,7 @@ flake 以外の参照は `scripts/check-pins.sh` が検査する。こちらも�
 - ワークフローの `runs-on` が `-latest` でないこと
 - README の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` と一致すること
 - README に固定した `NIX_SHA256` があり、配布元から取得した値との照合になっていないこと
+- `scripts/wsl-provision.sh` の `NIX_VERSION` と `NIX_SHA256` が README と一致すること (経路によって異なる版の Nix が入るのを防ぐため)
 - `scripts/wsl-bootstrap.ps1` の配布イメージが https の URL と 64 桁の sha256 で固定されており、こちらも配布元から取得した値との照合になっていないこと
 
 いずれも「上流に新しい版があるか」は見ない。それは更新の判断であり、検査の対象では
