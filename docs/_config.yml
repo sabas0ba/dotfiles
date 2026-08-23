@@ -1,7 +1,12 @@
 # GitHub Pages の設定。公開の対象は docs/ 以下のみである。
 #
-# baseurl は書かない。プロジェクトのサイトの URL はリポジトリ名に依存するため、
-# .github/workflows/pages.yml の actions/configure-pages が実行時に注入する。
+# baseurl はここに書く。プロジェクトのサイトは https://<user>.github.io/<repo>/ に
+# 置かれるため、これが無いとリンクが壊れる。
+#
+# actions/configure-pages による注入は使えない。当該 action が扱える設定ファイルは
+# .js / .cjs / .mjs に限られ、Jekyll の _config.yml を渡すと失敗する。したがって
+# リポジトリ名を変更した場合は本ファイルも変更する必要がある。
+baseurl: "/dotfiles"
 title: dotfiles
 description: Nix と direnv による再現性のある開発環境
 theme: jekyll-theme-primer
