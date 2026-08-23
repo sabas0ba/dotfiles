@@ -12,25 +12,52 @@
 #   hook          本リポジトリの .claude/settings.json の SessionStart フックから。
 #                 開発シェルの環境をセッションに引き渡す
 #   setup-script  クラウド環境の Setup script から。他のリポジトリのセッションでも
-#                 本環境を使うための経路であり、ツールとホームの構成を配置する
+#                 本環境を使うための経路であり、ツールとホームの構成を配置する。
+#                 system と $HOME を書き換えるため --disposable の明示を要する
 #
 # いずれもセッションの開始ごとに実行されるため、既に済んでいる処理は飛ばす。失敗した
 # 場合はそのまま再実行できる。
 #
-#   使用方法: scripts/cloud-setup.sh [--setup-script]
+#   使用方法: scripts/cloud-setup.sh [--setup-script --disposable]
 set -euo pipefail
 
-mode=hook
+usage() {
+  cat <<'USAGE'
+使用方法: scripts/cloud-setup.sh [--setup-script --disposable]
 
-case "${1:-}" in
-  "") ;;
-  --setup-script) mode=setup-script ;;
-  *)
-    echo "エラー: 引数が不明です: $1" >&2
-    echo "使用方法: scripts/cloud-setup.sh [--setup-script]" >&2
-    exit 1
-    ;;
-esac
+オプション:
+  --setup-script  クラウド環境の Setup script から呼ぶ経路。ツールを
+                  /usr/local/bin へ、home/ 以下を $HOME へ配置する。
+                  --disposable を併せて指定する必要がある
+  --disposable    実行先が使い捨ての環境であることの明示。--setup-script が
+                  行う配置は system と $HOME を書き換えるため、利用者のホストで
+                  誤って実行されないよう明示を要求する
+
+引数を与えない場合は SessionStart フックとしての動作となる。この経路は
+CLAUDE_CODE_REMOTE=true の環境でのみ処理を行う。
+USAGE
+}
+
+mode=hook
+disposable=0
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --setup-script) mode=setup-script ;;
+    --disposable) disposable=1 ;;
+    -h | --help)
+      usage
+      exit 0
+      ;;
+    *)
+      echo "エラー: 引数が不明です: $1" >&2
+      echo >&2
+      usage >&2
+      exit 1
+      ;;
+  esac
+  shift
+done
 
 # フックから呼ばれた場合はリモート実行環境でのみ動作させる。手元の環境は direnv または
 # nix develop で開発シェルに入る (docs/setup.md)。利用者のホストに Nix を導入する経路を
@@ -41,6 +68,32 @@ esac
 if [ "$mode" = hook ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   echo "リモート実行環境ではないため何もしない (CLAUDE_CODE_REMOTE が true でない)。"
   exit 0
+fi
+
+# Setup script の経路は、フックと違って環境変数による判定ができない。使い捨ての環境で
+# あることを --disposable の明示で確認する。当該環境をコンテナの印 (/.dockerenv、
+# /run/.containerenv、/proc/1/cgroup) から判定する方式は採らない。実際のクラウド環境には
+# いずれも存在せず、判定できないためである。
+#
+# この経路は /usr/local/bin へ system の同名のコマンドを覆う symlink を張り、$HOME の
+# ファイルを置き換える。利用者のホストで誤って実行された場合の影響が大きいため、
+# 引数の明示を要求する。
+if [ "$mode" = setup-script ] && [ "$disposable" -ne 1 ]; then
+  echo "エラー: --setup-script には --disposable が必要です。" >&2
+  echo >&2
+  echo "本経路は /usr/local/bin と \$HOME を書き換えます。使い捨ての環境 (Claude Code の" >&2
+  echo "リモート実行環境等) でのみ実行してください。手元の環境では nix develop または" >&2
+  echo "direnv を使います (docs/setup.md)。" >&2
+  echo >&2
+  echo "  scripts/cloud-setup.sh --setup-script --disposable" >&2
+  exit 1
+fi
+
+# 配置先はいずれも root を要する。非 root で走った場合、Nix の導入まで進んでから
+# 途中で失敗するため、先に止める。
+if [ "$mode" = setup-script ] && [ "$(id -u)" -ne 0 ]; then
+  echo "エラー: --setup-script は root で実行してください (現在: $(id -un))。" >&2
+  exit 1
 fi
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
@@ -82,14 +135,13 @@ configure_nix() {
   # build-users-group を空にする。root しか存在しないコンテナであり、ビルド用の
   # 利用者 (nixbld) を作れないため。空にしない場合、導入時の nix-env が失敗する。
   #
-  # sandbox と filter-syscalls の無効化は Dockerfile と同じ理由による。コンテナの
-  # seccomp プロファイルと Nix のサンドボックスが競合し、ビルドが失敗する。依存は
-  # すべて cache.nixos.org のバイナリで取得する。
+  # サンドボックスは無効化しない。Dockerfile 側は docker build の seccomp プロファイル
+  # との競合のために無効化しているが、当該環境ではその制約が無く、sandbox と
+  # filter-syscalls を有効にしたまま stdenv を用いるビルドまで成立する (user namespace
+  # が利用できる)。ビルドは root で走るため、無効化すると隔離が失われる。
   printf '%s\n' \
     "$NIX_FLAKE_CONF" \
     'build-users-group =' \
-    'sandbox = false' \
-    'filter-syscalls = false' \
     'max-jobs = auto' \
     >>"$path"
 
@@ -243,11 +295,13 @@ show_revision() {
 # あるため symlink できる。中身はいずれも nix/packages.nix である。
 #
 # system の同名のコマンド (git、coreutils 等) は Nix 版に置き換わる。環境を揃える
-# ことが目的であるため意図した挙動だが、影響する範囲であるため docs/setup.md に明記する。
+# ことが目的であるため意図した挙動だが、影響する範囲であるため docs/setup.md に明記し、
+# 実際に覆ったものを実行時にも示す。
 install_toolchain() {
   local profile=/nix/var/nix/profiles/dotfiles-toolchain
-  local source target
+  local source target name existing
   local count=0
+  local shadowed=()
 
   if [ -e "$profile" ]; then
     note "ツールの profile は既にある ($profile)"
@@ -267,7 +321,17 @@ install_toolchain() {
     # 対象が無い場合、glob は展開されずそのまま残る。
     [ -e "$source" ] || continue
 
-    target=/usr/local/bin/$(basename "$source")
+    name=$(basename "$source")
+    target=/usr/local/bin/$name
+
+    # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
+    # symlink (/usr/local/bin) と Nix の実体は対象から除く。
+    existing=$(command -v "$name" 2>/dev/null || true)
+    case "$existing" in
+      "" | /usr/local/bin/* | /nix/*) ;;
+      *) shadowed+=("$name") ;;
+    esac
+
     ln -sfn "$source" "$target"
     count=$((count + 1))
   done
@@ -278,6 +342,10 @@ install_toolchain() {
   fi
 
   note "/usr/local/bin へ配置した ($count 件)"
+
+  if [ "${#shadowed[@]}" -ne 0 ]; then
+    note "system の同名のコマンドを覆った (${#shadowed[@]} 件): ${shadowed[*]}"
+  fi
 }
 
 # home/ 以下をホームディレクトリの構造に対応させて配置する。
@@ -288,12 +356,23 @@ install_toolchain() {
 #
 # 既存のファイルは上書きする。使い捨ての VM であり、かつ本処理は Claude Code の起動
 # より前に走るため、セッションが書いたものを消すことはない。
+#
+# ただし内容が異なるものを黙って消さない。最初に見つけた状態を .dotfiles-backup へ
+# 退避し、退避先を出力する。退避は 1 度だけ行う。再実行のたびに上書きすると、本処理が
+# 置いた内容で元の状態が置き換わるためである。
 install_home() {
-  local source target
+  local source target backup
 
   while IFS= read -r source; do
     target=$HOME/${source#"$repo/home/"}
+    backup=$target.dotfiles-backup
     mkdir -p "$(dirname "$target")"
+
+    if [ -e "$target" ] && [ ! -e "$backup" ] && ! cmp -s "$source" "$target"; then
+      cp -p "$target" "$backup"
+      note "退避した ${backup#"$HOME/"}"
+    fi
+
     cp -f "$source" "$target"
     note "配置した ${target#"$HOME/"}"
   done < <(find "$repo/home" -type f)

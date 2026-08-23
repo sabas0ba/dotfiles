@@ -31,6 +31,10 @@ FROM nixos/nix:${NIX_VERSION}@${NIX_IMAGE_DIGEST}
 # プロファイルと Nix のサンドボックスが競合してビルドが失敗するため。本イメージでは
 # 依存をすべて cache.nixos.org のバイナリで取得し、ビルドは行わない。
 #
+# 無効化の対象は本経路 (docker build) に限る。Nix を導入する他の経路が同じ設定を
+# 複製しないこと。Claude Code のリモート実行環境 (scripts/cloud-setup.sh) では上記の
+# 制約が無く、サンドボックスを有効にしたままビルドが成立することを確認している。
+#
 # flake-registry を空にしているのは、本リポジトリの flake が入力をすべて固定しており
 # グローバルレジストリを参照しないため。空にしない場合、ネットワークの無い環境で
 # nix を実行するたびに channels.nixos.org への取得失敗が出力される。
