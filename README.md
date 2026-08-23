@@ -135,6 +135,10 @@ Claude Code のリモート実行環境では、`~/.gitconfig` をセッショ�
 ファイルを個別に symlink する。`~/.claude` に home-manager の管理外のファイルが
 存在する場合でも、それらを置き換えない。
 
+`home/.claude/settings.json` は Claude Code の permission の既定値である。認証情報を含むファイルの読み出しと、認証済みの CLI の実行をそれぞれ deny / ask に置く。方針は `home/.claude/CLAUDE.md` の「実行環境と到達範囲」に記述してある。これは Claude Code がツールの実行前に行う検査であり、OS レベルの強制ではない。Bash から起動した子プロセスには及ばないため、到達経路そのものを断てる環境ではそちらを主たる担保とし、本設定はそれが使えない環境向けの補助と位置付ける。
+
+配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を用いる (プロジェクトの設定が利用者全体の設定より優先される)。
+
 ## コンテナ環境
 
 ホストと同一の環境をコンテナ内に構築する。Dockerfile はツールの一覧を持たず、本
