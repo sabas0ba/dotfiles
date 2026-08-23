@@ -92,7 +92,7 @@ None を指定した場合、フックは Nix を取得できずに失敗する�
 
 Setup script は使わない。当該欄は VM に素の状態で足りないツールを入れるためのものであり、本リポジトリの構成はリポジトリ内の SessionStart フックが行う。フックに置くことで、同じ定義がクラウドと手元の双方に効く。
 
-以上は本リポジトリを開いたセッションに対するものである。フックは本リポジトリの `.claude/settings.json` にあるため、他のリポジトリのセッションでは動作しない。他のリポジトリの開発で本環境を使う場合は、利用側に同様のフックを置くか、環境の Setup script で導入することになる。
+以上は本リポジトリを開いたセッションに対するものである。フックは本リポジトリの `.claude/settings.json` にあるため、他のリポジトリのセッションでは動作しない。その場合は次節の手順を用いる。
 
 ### 到達範囲の制限
 
@@ -111,6 +111,42 @@ nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 ```
 
 すべての検査 (`make check`) は CI がコンテナ内で実行する。イメージは構築時に flake の入力をすべて取り込んでおり、`--network none` で完結する。
+
+### 他のリポジトリで使う
+
+本リポジトリ以外の開発でも本環境を使う場合は、クラウド環境の Setup script に以下を書く。フックは本リポジトリにしか無いため、環境の側から入れる。
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+DOTFILES_REV=<40 桁のリビジョン>
+
+git clone https://github.com/sabas0ba/dotfiles /opt/dotfiles
+git -C /opt/dotfiles checkout "$DOTFILES_REV"
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script
+```
+
+リビジョンを固定する。設定欄は本リポジトリの検査 (`scripts/check-pins.sh`) の対象外であり、固定を機械的に確かめられないため、値は利用者が明示する。本リポジトリは public であり、セッションに紐付いていなくても clone できる (前節のとおり tarball は 403 となるが、git 経由は通る)。
+
+`--setup-script` は以下を行う。フックの経路との違いは、環境変数を引き渡す代わりに実体を配置する点である。
+
+| 処理 | フック | Setup script |
+| --- | --- | --- |
+| Nix の導入 | 行う | 行う |
+| 開発シェルの実体化 | 行う | 行う |
+| 環境の引き渡し | `$CLAUDE_ENV_FILE` へ書く | 行わない (下記の配置で代える) |
+| ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
+| ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く |
+
+配置先を `/usr/local/bin` としているのは、Setup script には `CLAUDE_ENV_FILE` が無く、環境変数を渡す手段がないためである。セッションのシェルは `/etc/profile` を読まないため `profile.d` や rc ファイルでも渡らない。既に PATH にある場所へ実体を置く必要がある。対象は `nix build .#default` の profile (中身は `nix/packages.nix`) と、`nix` 自身のコマンドである。
+
+以下に注意する。
+
+- system の同名のコマンド (`git`、coreutils 等) は Nix 版に置き換わる。`/usr/local/bin` は `/usr/bin` より前にあるため。環境を揃えることが目的であるため意図した挙動である
+- 言語のツールチェーン (Node、Python 等) は `nix/packages.nix` に無い。クラウド環境が最初から持つものをそのまま使う
+- ホームの構成は home-manager を経由しない。前節のとおり当該環境からは home-manager を取得できないため。置く内容は同一であり、既存のファイルは上書きする
+- 初回は Nix の導入と開発シェルの構築で数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られず、セッションのたびに実行される
 
 ---
 

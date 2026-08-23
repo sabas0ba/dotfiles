@@ -7,15 +7,38 @@
 # として実体化したうえで、その環境変数をセッションに引き渡す。これにより、以降の
 # コマンドは他の環境と同一のツールで動作する。
 #
-# .claude/settings.json の SessionStart フックから呼ばれる。セッションの開始ごとに
-# 実行されるため、既に済んでいる処理は飛ばす。失敗した場合はそのまま再実行できる。
+# 呼ばれ方は 2 つある。
 #
-#   使用方法: scripts/cloud-setup.sh
+#   hook          本リポジトリの .claude/settings.json の SessionStart フックから。
+#                 開発シェルの環境をセッションに引き渡す
+#   setup-script  クラウド環境の Setup script から。他のリポジトリのセッションでも
+#                 本環境を使うための経路であり、ツールとホームの構成を配置する
+#
+# いずれもセッションの開始ごとに実行されるため、既に済んでいる処理は飛ばす。失敗した
+# 場合はそのまま再実行できる。
+#
+#   使用方法: scripts/cloud-setup.sh [--setup-script]
 set -euo pipefail
 
-# リモート実行環境でのみ動作させる。手元の環境は direnv または nix develop で開発
-# シェルに入る (docs/setup.md)。利用者のホストに Nix を導入する経路をここに作らない。
-if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
+mode=hook
+
+case "${1:-}" in
+  "") ;;
+  --setup-script) mode=setup-script ;;
+  *)
+    echo "エラー: 引数が不明です: $1" >&2
+    echo "使用方法: scripts/cloud-setup.sh [--setup-script]" >&2
+    exit 1
+    ;;
+esac
+
+# フックから呼ばれた場合はリモート実行環境でのみ動作させる。手元の環境は direnv または
+# nix develop で開発シェルに入る (docs/setup.md)。利用者のホストに Nix を導入する経路を
+# ここに作らない。
+#
+# Setup script は Claude Code の起動より前に走り、当該変数を持たないため対象外とする。
+# こちらは利用者が環境の設定として明示的に書いたときにしか実行されない。
+if [ "$mode" = hook ] && [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   echo "リモート実行環境ではないため何もしない (CLAUDE_CODE_REMOTE が true でない)。"
   exit 0
 fi
@@ -191,6 +214,76 @@ write_env_file() {
   note "開発シェルの環境を引き渡した ($env_file)"
 }
 
+# --- 他のリポジトリから使うための配置 (--setup-script) ------------------------
+
+# ツールをセッションの PATH に載せる。
+#
+# フックと違い Setup script には CLAUDE_ENV_FILE が無く、環境変数を引き渡す手段が
+# ない。セッションのシェルは /etc/profile を読まない (ツールは bash -c で起動し、
+# 事前に作られるシェルの写しにも /etc/profile.d の内容は入らない) ため、profile.d や
+# rc ファイルでも渡せない。既に PATH にある /usr/local/bin へ実体を置く。
+#
+# 開発シェルではなく nix build .#default の profile を対象とする。前者は
+# nix develop を経由しなければ入れないが、後者は bin/ を持つ通常のディレクトリで
+# あるため symlink できる。中身はいずれも nix/packages.nix である。
+#
+# system の同名のコマンド (git、coreutils 等) は Nix 版に置き換わる。環境を揃える
+# ことが目的であるため意図した挙動だが、影響する範囲であるため docs/setup.md に明記する。
+install_toolchain() {
+  local profile=/nix/var/nix/profiles/dotfiles-toolchain
+  local source target
+  local count=0
+
+  if [ -e "$profile" ]; then
+    note "ツールの profile は既にある ($profile)"
+  else
+    nix profile install --profile "$profile" "$repo#default"
+    note "ツールを profile として実体化した ($profile)"
+  fi
+
+  mkdir -p /usr/local/bin
+
+  # nix 自身も対象に含める。他のリポジトリのセッションでも nix develop や nix shell を
+  # 使えるようにするため。導入方式によって置き場所が異なるため、解決済みの nix から辿る。
+  local nix_bin
+  nix_bin=$(dirname "$(command -v nix)")
+
+  for source in "$profile"/bin/* "$nix_bin"/*; do
+    # 対象が無い場合、glob は展開されずそのまま残る。
+    [ -e "$source" ] || continue
+
+    target=/usr/local/bin/$(basename "$source")
+    ln -sfn "$source" "$target"
+    count=$((count + 1))
+  done
+
+  if [ "$count" -eq 0 ]; then
+    echo "エラー: $profile/bin にコマンドがありません。" >&2
+    exit 1
+  fi
+
+  note "/usr/local/bin へ配置した ($count 件)"
+}
+
+# home/ 以下をホームディレクトリの構造に対応させて配置する。
+#
+# home-manager は使わない。当該環境からは flake の入力 (nix-community/home-manager)
+# を取得できないため (docs/setup.md の「到達範囲の制限」)。したがって配置の機構は
+# 手元の環境と異なる。置く内容は同一である。
+#
+# 既存のファイルは上書きする。使い捨ての VM であり、かつ本処理は Claude Code の起動
+# より前に走るため、セッションが書いたものを消すことはない。
+install_home() {
+  local source target
+
+  while IFS= read -r source; do
+    target=$HOME/${source#"$repo/home/"}
+    mkdir -p "$(dirname "$target")"
+    cp -f "$source" "$target"
+    note "配置した ${target#"$HOME/"}"
+  done < <(find "$repo/home" -type f)
+}
+
 # --- 実行 --------------------------------------------------------------------
 
 step "Nix を導入する"
@@ -201,8 +294,16 @@ load_nix
 step "開発シェルを構築する"
 build_dev_shell
 
-step "セッションに環境を引き渡す"
-write_env_file
+if [ "$mode" = hook ]; then
+  step "セッションに環境を引き渡す"
+  write_env_file
+else
+  step "ツールを配置する"
+  install_toolchain
+
+  step "ホームディレクトリの構成を配置する"
+  install_home
+fi
 
 step "環境を検査する"
 nix develop "$DOTFILES_PROFILE" --command "$repo/scripts/check-env.sh"
