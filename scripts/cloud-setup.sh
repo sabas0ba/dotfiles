@@ -216,6 +216,21 @@ write_env_file() {
 
 # --- 他のリポジトリから使うための配置 (--setup-script) ------------------------
 
+# 動かしているリビジョンを示す。
+#
+# この経路は本リポジトリを固定せず、最新を使う運用を許す (docs/reproducibility.md)。
+# 固定しない以上、何を動かしているかは実行時にしか分からない。戻す判断ができるよう、
+# 実際に使ったリビジョンを出力する。
+show_revision() {
+  local revision
+
+  if revision=$(git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null); then
+    note "$revision"
+  else
+    note "リビジョンを取得できない ($repo は git のリポジトリではない)"
+  fi
+}
+
 # ツールをセッションの PATH に載せる。
 #
 # フックと違い Setup script には CLAUDE_ENV_FILE が無く、環境変数を引き渡す手段が
@@ -285,6 +300,11 @@ install_home() {
 }
 
 # --- 実行 --------------------------------------------------------------------
+
+if [ "$mode" = setup-script ]; then
+  step "使用する dotfiles のリビジョン"
+  show_revision
+fi
 
 step "Nix を導入する"
 configure_nix

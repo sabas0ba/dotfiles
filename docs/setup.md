@@ -120,14 +120,25 @@ nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 #!/bin/bash
 set -euo pipefail
 
-DOTFILES_REV=<40 桁のリビジョン>
-
-git clone https://github.com/sabas0ba/dotfiles /opt/dotfiles
-git -C /opt/dotfiles checkout "$DOTFILES_REV"
+git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
 /opt/dotfiles/scripts/cloud-setup.sh --setup-script
 ```
 
-リビジョンを固定する。設定欄は本リポジトリの検査 (`scripts/check-pins.sh`) の対象外であり、固定を機械的に確かめられないため、値は利用者が明示する。本リポジトリは public であり、セッションに紐付いていなくても clone できる (前節のとおり tarball は 403 となるが、git 経由は通る)。
+本リポジトリは public であり、セッションに紐付いていなくても clone できる (前節のとおり tarball は 403 となるが、git 経由は通る)。
+
+ここでは本リポジトリを固定しない。常に最新を使う運用であり、本リポジトリで唯一の例外である ([再現性](reproducibility.md) を参照)。固定しない以上、何を動かしているかは実行時にしか分からないため、`--setup-script` は使用するリビジョンを最初に出力する。後から確認する場合は clone を直接見る。
+
+```bash
+git -C /opt/dotfiles log -1 --format='%H %cs %s'
+```
+
+版を戻す、または特定の版に留める場合は、clone のあとに対象を明示する。
+
+```bash
+git clone https://github.com/sabas0ba/dotfiles /opt/dotfiles
+git -C /opt/dotfiles checkout <40 桁のリビジョン>
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script
+```
 
 `--setup-script` は以下を行う。フックの経路との違いは、環境変数を引き渡す代わりに実体を配置する点である。
 
