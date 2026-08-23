@@ -73,14 +73,42 @@ direnv allow
 
 構成後のコンテナの状態は保存されるため、2 回目以降のセッションの開始は速い。フックは `CLAUDE_CODE_REMOTE=true` の環境でのみ動作し、手元の環境には何も行わない。
 
-到達できる取得先は環境のネットワーク設定に依存する。許可されていない取得先は 403 となるため、`nix flake check` が flake の入力 (home-manager、NixOS-WSL) の取得で失敗することがある。この場合も開発シェルは成立しており、取得を伴わない検査は実行できる。
+### 環境に指定する設定
+
+環境は claude.ai/code のメッセージ入力欄の上にある環境セレクタ (雲のアイコン) から作成・変更する。本リポジトリに対して指定するものは以下である。
+
+| 項目 | 指定 |
+| --- | --- |
+| Network access | Trusted (既定)。変更しない |
+| Environment variables | 不要 |
+| Setup script | 不要 |
+
+Network access を既定のままでよいのは、Trusted の許可リストに `*.nixos.org` が含まれるためである。フックが到達する必要があるのは以下の 2 つで、いずれもこれに含まれる。
+
+- `releases.nixos.org` — Nix 本体の配布物
+- `cache.nixos.org` — 依存のバイナリ
+
+None を指定した場合、フックは Nix を取得できずに失敗する。セッション自体は開始するが、開発シェルが無いため `make` も検査も実行できない。Custom を指定する場合は上記の 2 つを許可リストに加える。
+
+Setup script は使わない。当該欄は VM に素の状態で足りないツールを入れるためのものであり、本リポジトリの構成はリポジトリ内の SessionStart フックが行う。フックに置くことで、同じ定義がクラウドと手元の双方に効く。
+
+### 到達範囲の制限
+
+GitHub への要求は、ネットワークの設定とは別の proxy を通り、セッションに紐付いたリポジトリだけに制限される。したがって `github:` 形式の flake の入力は、当該リポジトリが紐付いていない限り取得できない (403)。これは Network access を Full にしても変わらない。
+
+実際には入力ごとに以下のようになる。
+
+- `nixpkgs` — 取得は 403 となるが、`cache.nixos.org` から substitute できるため影響がない
+- `home-manager`、`NixOS-WSL` — substitute できないため取得が必要であり、`nix flake check` はここで失敗する
+
+開発シェルは成立しているため、取得を伴わない検査は実行できる。
 
 ```bash
-scripts/check-env.sh                          # 環境のスモークテスト
-nix build --no-link .#checks.x86_64-linux.pins  # 個別の検査
+scripts/check-env.sh                             # 環境のスモークテスト
+nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 ```
 
-すべての検査を実行する必要がある場合は、環境のネットワーク設定で当該の取得先を許可する。
+すべての検査 (`make check`) は CI がコンテナ内で実行する。イメージは構築時に flake の入力をすべて取り込んでおり、`--network none` で完結する。
 
 ---
 
