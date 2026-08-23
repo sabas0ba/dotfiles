@@ -1,0 +1,459 @@
+/*
+ * 本サイトの見た目の定義。外部のテーマおよび web フォントに依存しない。
+ *
+ * 配色は変数で定義し、light と dark で値のみを差し替える。個々の規則に色を直接
+ * 書かないのは、片方の配色にしか反映されない指定が混ざることを防ぐため。
+ *
+ * 配色の決定は 3 段である。
+ *   1. :root                      light の値 (既定)
+ *   2. prefers-color-scheme: dark OS が暗い設定のとき。ただし利用者が light を
+ *                                 選んでいる場合は適用しない
+ *   3. [data-theme="dark"]        利用者が dark を選んだとき。OS の設定に優先する
+ */
+
+:root {
+  --bg: #ffffff;
+  --bg-surface: #f6f8fa;
+  --bg-inline: rgba(129, 139, 152, 0.12);
+  --fg: #1f2328;
+  --fg-muted: #59636e;
+  --border: #d1d9e0;
+  --accent: #0969da;
+  --accent-bg: rgba(9, 105, 218, 0.08);
+
+  /* 構文強調 (Rouge) の色。テーマを持たないため自前で定義する。 */
+  --code-comment: #59636e;
+  --code-keyword: #cf222e;
+  --code-string: #0a3069;
+  --code-number: #0550ae;
+  --code-function: #8250df;
+  --code-variable: #953800;
+
+  --measure: 46rem;
+  --radius: 6px;
+
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans",
+    "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic UI", Meiryo, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", "Noto Sans Mono", monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0d1117;
+    --bg-surface: #151b23;
+    --bg-inline: rgba(101, 108, 118, 0.2);
+    --fg: #d1d7e0;
+    --fg-muted: #9198a1;
+    --border: #3d444d;
+    --accent: #4493f8;
+    --accent-bg: rgba(68, 147, 248, 0.12);
+
+    --code-comment: #9198a1;
+    --code-keyword: #ff7b72;
+    --code-string: #a5d6ff;
+    --code-number: #79c0ff;
+    --code-function: #d2a8ff;
+    --code-variable: #ffa657;
+  }
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d1117;
+  --bg-surface: #151b23;
+  --bg-inline: rgba(101, 108, 118, 0.2);
+  --fg: #d1d7e0;
+  --fg-muted: #9198a1;
+  --border: #3d444d;
+  --accent: #4493f8;
+  --accent-bg: rgba(68, 147, 248, 0.12);
+
+  --code-comment: #9198a1;
+  --code-keyword: #ff7b72;
+  --code-string: #a5d6ff;
+  --code-number: #79c0ff;
+  --code-function: #d2a8ff;
+  --code-variable: #ffa657;
+}
+
+/* --- 基本 ---------------------------------------------------------------- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  /* 内容が短いページでもフッタを画面の下端に置く。文書の量にばらつきが
+     あるため、途中で切れたように見えるのを避ける。 */
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 16px;
+  /* 日本語は行間を広めに取る。英文の既定値では字面が詰まって読みにくい。 */
+  line-height: 1.85;
+}
+
+.wrap {
+  width: 100%;
+  max-width: var(--measure);
+  margin: 0 auto;
+  padding: 0 1.25rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* キーボード操作でのみ現れる本文への近道。 */
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* --- ヘッダ -------------------------------------------------------------- */
+
+.site-header {
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.site-header-inner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  padding-top: 0.75rem;
+  padding-bottom: 0.75rem;
+}
+
+.site-title {
+  color: var(--fg);
+  font-weight: 700;
+  font-size: 1.05rem;
+  letter-spacing: 0.01em;
+}
+
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  margin-right: auto;
+  font-size: 0.9rem;
+  /* flex 項目の既定 (min-width: auto) では内容の幅より縮まないため、狭い画面で
+     ヘッダごと横に溢れる。0 を与えて内部で折り返させる。 */
+  min-width: 0;
+}
+
+.site-nav a {
+  color: var(--fg-muted);
+  padding: 0.1rem 0;
+  border-bottom: 2px solid transparent;
+}
+
+.site-nav a:hover {
+  color: var(--fg);
+  text-decoration: none;
+}
+
+/* 現在のページ。色だけで示すと配色設定によっては区別が付かないため、
+   下線も併せて与える。 */
+.site-nav a[aria-current="page"] {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+
+.theme-toggle {
+  flex: none;
+  padding: 0.2rem 0.7rem;
+  background: var(--bg);
+  color: var(--fg-muted);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font: inherit;
+  font-size: 0.8rem;
+  line-height: 1.7;
+  cursor: pointer;
+}
+
+.theme-toggle:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+/* --- 本文 ---------------------------------------------------------------- */
+
+main {
+  flex: 1;
+  padding-top: 3rem;
+  padding-bottom: 4rem;
+}
+
+main > :first-child {
+  margin-top: 0;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 2.5rem 0 1rem;
+  line-height: 1.45;
+  font-weight: 700;
+}
+
+h1 {
+  margin-top: 0;
+  font-size: 1.9rem;
+  letter-spacing: -0.01em;
+}
+
+h2 {
+  font-size: 1.35rem;
+  padding-top: 1.75rem;
+  border-top: 1px solid var(--border);
+}
+
+h3 {
+  font-size: 1.1rem;
+}
+
+h4 {
+  font-size: 1rem;
+}
+
+p,
+ul,
+ol {
+  margin: 1rem 0;
+}
+
+li + li {
+  margin-top: 0.35rem;
+}
+
+li > ul,
+li > ol {
+  margin: 0.35rem 0;
+}
+
+hr {
+  height: 1px;
+  margin: 2.5rem 0;
+  border: 0;
+  background: var(--border);
+}
+
+blockquote {
+  margin: 1rem 0;
+  padding: 0.25rem 0 0.25rem 1rem;
+  border-left: 3px solid var(--border);
+  color: var(--fg-muted);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+}
+
+/* --- コード -------------------------------------------------------------- */
+
+code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+}
+
+/* 文中のコード。前後の語と接するため、わずかな余白と背景で切り出す。 */
+:not(pre) > code {
+  padding: 0.15em 0.35em;
+  background: var(--bg-inline);
+  border-radius: var(--radius);
+}
+
+pre {
+  margin: 1.25rem 0;
+  padding: 0.9rem 1rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  /* 長い行は折り返さず横に送る。コマンドの途中で改行されると、
+     読み手が行の境界を判断できない。 */
+  overflow-x: auto;
+  line-height: 1.7;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+}
+
+/* 構文強調。Rouge が出力する class に対応する。 */
+.highlight .c,
+.highlight .c1,
+.highlight .cm,
+.highlight .cd,
+.highlight .cp {
+  color: var(--code-comment);
+  font-style: italic;
+}
+
+.highlight .k,
+.highlight .kd,
+.highlight .kn,
+.highlight .kp,
+.highlight .kr,
+.highlight .kt,
+.highlight .kc,
+.highlight .o,
+.highlight .ow {
+  color: var(--code-keyword);
+}
+
+.highlight .s,
+.highlight .s1,
+.highlight .s2,
+.highlight .sb,
+.highlight .se,
+.highlight .sx,
+.highlight .sr,
+.highlight .dl {
+  color: var(--code-string);
+}
+
+.highlight .m,
+.highlight .mi,
+.highlight .mf,
+.highlight .mh,
+.highlight .il,
+.highlight .no,
+.highlight .nb,
+.highlight .bp {
+  color: var(--code-number);
+}
+
+.highlight .nf,
+.highlight .nc,
+.highlight .nn,
+.highlight .fm {
+  color: var(--code-function);
+}
+
+.highlight .nv,
+.highlight .vg,
+.highlight .vi,
+.highlight .na,
+.highlight .nt {
+  color: var(--code-variable);
+}
+
+/* シェルのプロンプトと入力の区別。 */
+.highlight .gp {
+  color: var(--fg-muted);
+}
+
+.highlight .err {
+  color: var(--code-keyword);
+}
+
+/* --- 表 ------------------------------------------------------------------ */
+
+/* 表は本文より広くなりうる。ページ全体を横スクロールさせず表だけを送るため、
+   ブロックとして扱う。内容に足りる幅までしか広がらないため、列の少ない表が
+   間延びすることもない。 */
+table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 1.25rem 0;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+th,
+td {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background: var(--bg-surface);
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+/* --- フッタ -------------------------------------------------------------- */
+
+.site-footer {
+  border-top: 1px solid var(--border);
+  background: var(--bg-surface);
+}
+
+.site-footer-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.5rem;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}
+
+.site-footer a {
+  color: var(--fg-muted);
+}
+
+.site-footer a:hover {
+  color: var(--accent);
+}
+
+/* --- 印刷 ---------------------------------------------------------------- */
+
+@media print {
+  .site-header,
+  .site-footer,
+  .skip-link {
+    display: none;
+  }
+
+  body {
+    background: #ffffff;
+    color: #000000;
+  }
+
+  pre {
+    white-space: pre-wrap;
+  }
+}

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="{{ site.lang | default: 'ja' }}">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <!-- 利用者の配色設定に従うことを宣言する。フォームやスクロールバー等、
+         ブラウザが描画する部品の配色もこれに追従する。 -->
+    <meta name="color-scheme" content="light dark">
+
+    <!-- jekyll-seo-tag は GitHub Pages が既定で有効にしている。title は
+         jekyll-titles-from-headings が各ページの最初の見出しから与える。 -->
+    {% seo %}
+
+    <!-- 生成のたびにクエリを変えて古い CSS が使われないようにする。 -->
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}?v={{ site.time | date: '%s' }}">
+
+    <!-- 配色の決定は描画より前に行う。本文の描画後に切り替えると、暗い設定の
+         利用者に明るい画面が一瞬見える。外部への要求を伴わないため head に置く。 -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem('dotfiles-theme');
+          if (stored === 'light' || stored === 'dark') {
+            document.documentElement.dataset.theme = stored;
+          }
+        } catch (e) {
+          // localStorage が使えない環境 (プライベートウィンドウ等) では
+          // OS の設定に従う。既定の動作であり、対処は要らない。
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <a class="skip-link" href="#main">本文へ移動</a>
+
+    <header class="site-header">
+      <div class="wrap site-header-inner">
+        <a class="site-title" href="{{ '/' | relative_url }}">{{ site.title }}</a>
+
+        <nav class="site-nav" aria-label="ページ">
+          {% for item in site.nav %}
+            {% assign target = item.url | relative_url %}
+            <a href="{{ target }}"{% if page.url == item.url %} aria-current="page"{% endif %}>{{ item.title }}</a>
+          {% endfor %}
+        </nav>
+
+        <!-- 3 状態を巡回する。既定は「自動」であり、OS の設定に従う。 -->
+        <button class="theme-toggle" type="button" data-theme-toggle aria-live="polite">
+          <span class="theme-toggle-label">自動</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="wrap" id="main">
+      {{ content }}
+    </main>
+
+    <footer class="site-footer">
+      <div class="wrap site-footer-inner">
+        <a href="{{ site.repo_url }}">{{ site.title }} のリポジトリ</a>
+        <a href="{{ site.repo_url }}/blob/main/docs/{{ page.path }}">このページの原文</a>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var button = document.querySelector('[data-theme-toggle]');
+        if (!button) return;
+
+        var label = button.querySelector('.theme-toggle-label');
+        var order = ['auto', 'light', 'dark'];
+        var text = { auto: '自動', light: 'ライト', dark: 'ダーク' };
+
+        function current() {
+          var value = document.documentElement.dataset.theme;
+          return value === 'light' || value === 'dark' ? value : 'auto';
+        }
+
+        function apply(mode) {
+          if (mode === 'auto') {
+            delete document.documentElement.dataset.theme;
+          } else {
+            document.documentElement.dataset.theme = mode;
+          }
+
+          label.textContent = text[mode];
+          button.setAttribute('aria-label', '配色: ' + text[mode] + '。切り替える');
+
+          try {
+            if (mode === 'auto') {
+              localStorage.removeItem('dotfiles-theme');
+            } else {
+              localStorage.setItem('dotfiles-theme', mode);
+            }
+          } catch (e) {
+            // 保存できない場合も表示の切り替えは成立する。次回の読み込みで
+            // 自動に戻るだけであるため、利用者へ通知しない。
+          }
+        }
+
+        apply(current());
+
+        button.addEventListener('click', function () {
+          apply(order[(order.indexOf(current()) + 1) % order.length]);
+        });
+      })();
+    </script>
+  </body>
+</html>
