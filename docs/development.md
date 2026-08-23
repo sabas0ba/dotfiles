@@ -29,6 +29,8 @@ CLAUDE.md                Claude Code 向けの補足
 
 `pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で動く。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
 
+公開を開始するには、リポジトリの Settings → Pages で Source を「GitHub Actions」にする操作が一度だけ必要である。`actions/configure-pages` の `enablement` でワークフローから有効化することもできるが、CI がリポジトリの設定を変更することになるため採っていない。
+
 `update-pins.yml` は固定の更新と PR の作成を行う。手動実行のみで、定期実行はしない。
 
 ## ツールを追加する
