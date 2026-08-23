@@ -51,4 +51,8 @@ if [ "${DOTFILES_ENV:-}" != "nix-develop" ]; then
   exit 1
 fi
 
+# WSL 上では Windows 側からの隔離が成立していることも環境の要件とする。
+# WSL 以外では当該スクリプトが何も検査せずに成功する。
+"$(dirname "$0")/check-wsl-isolation.sh"
+
 echo "開発環境は正常です (DOTFILES_ENV=${DOTFILES_ENV})。"

@@ -1,0 +1,86 @@
+# 使い方
+
+## 日常の操作
+
+```bash
+make help          # 利用可能な操作の一覧
+make check         # すべての検査 (整形・静的解析・環境のスモークテスト)
+make fmt           # Nix およびシェルスクリプトの整形
+make lint          # 静的解析のみ
+make shell         # 開発シェルに入る (direnv 未使用時)
+```
+
+作業は開発シェルの内部で行う。`DOTFILES_ENV` が `nix-develop` であれば内部であり、`scripts/check-env.sh` で確認できる。
+
+ツールを開発シェルの外から導入しない。`apt install` / `brew install` / `npm install -g` / `pip install --user` は再現性を損なう。必要なツールは [`nix/packages.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/packages.nix) に追記して取得する。
+
+## ホームディレクトリの構成
+
+ホームディレクトリの内容は home-manager で宣言的に管理する。管理対象は 2 種類ある。
+
+- 設定の生成: [`nix/home.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/home.nix) の `programs.git` 等。git の user/email もここで設定する
+- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する (`home/.claude/CLAUDE.md` → `~/.claude/CLAUDE.md`)
+
+既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
+
+```bash
+make hm-build   # 構成の構築のみ (ホームディレクトリは変更しない)
+make hm-dry     # 配置内容の確認
+make hm-switch  # 配置の実行
+```
+
+`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使う。環境ごとに指定する必要はない。明示する場合は `make hm-switch HM_TARGET=<name>` とする。
+
+### 適用対象
+
+対象は `flake.nix` の `homeTargets` に定義する。ホームディレクトリはユーザー名と `system` から導出する (linux は `/home/<name>`、darwin は `/Users/<name>`)。規則から外れる対象だけ `homeDirectory` を明示する。したがってマシンを追加する場合、通常はユーザー名と `system` の指定で足りる。
+
+| 対象 | ホームディレクトリ | 用途 |
+| --- | --- | --- |
+| `sabas0ba` | `/home/sabas0ba` (導出) | 個人環境 |
+| `nixos` | `/home/nixos` (導出) | [WSL 上の環境](windows.md) |
+| `root` | `/root` (明示) | Claude Code のリモート実行環境 |
+
+`nixos` は NixOS-WSL の `wsl.defaultUser` の既定値である。改名すると初回の `nixos-rebuild` が終わるまで対象が存在しないことになるため、既定値のまま使う。
+
+Claude Code のリモート実行環境では `~/.gitconfig` をセッション側が管理している。home-manager が生成するのは `~/.config/git/config` なのでファイルの衝突は起きないが、git は `~/.gitconfig` を後に読むため、user の設定は当該環境ではセッション側が優先される。
+
+### Claude Code の設定
+
+`home/.claude` は `recursive = true` で配置する。ディレクトリごとではなく配下のファイルを個別に symlink するため、`~/.claude` に管理外のファイルがあっても置き換えない。
+
+`home/.claude/settings.json` は permission の既定値で、認証情報を含むファイルの読み出しと認証済み CLI の実行をそれぞれ deny / ask に置く。方針は `home/.claude/CLAUDE.md` の「実行環境と到達範囲」にある。
+
+これは Claude Code がツール実行前に行う検査であって OS レベルの強制ではなく、Bash から起動した子プロセスには及ばない。WSL では[隔離](windows.md#windows-側からの隔離)を主たる担保とし、本設定はそれが使えない環境 (Windows ネイティブ、Linux ホスト) 向けの補助である。
+
+配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を使う (プロジェクトの設定が優先される)。
+
+## コンテナ環境
+
+ホストと同一の環境をコンテナ内に構築する。`Dockerfile` はツールの一覧を持たず `flake.nix` を評価するため、内容がホストと一致する。
+
+```bash
+make docker-build   # イメージの構築
+make docker-shell   # コンテナ内の開発シェルに入る (カレントディレクトリをマウント)
+make docker-check   # コンテナ内でのスモークテスト
+```
+
+直接実行する場合:
+
+```bash
+docker build -t dotfiles-dev .
+docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
+docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
+```
+
+ビルド時に開発シェルを Nix の profile として実体化しているため、起動は約 1 秒でネットワークも要らない。flake のすべての入力のソースを含むので、`--network none` のまま `make check` が通る。
+
+コンテナ内では名前 `nixpkgs` も `flake.lock` で固定した nixpkgs に解決される。以下はネットワーク無しで動く。
+
+```bash
+nix shell nixpkgs#jq
+```
+
+---
+
+[目次に戻る](index.md)

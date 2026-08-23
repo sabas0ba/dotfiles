@@ -13,6 +13,18 @@
       url = "github:nix-community/home-manager/4ce190229c73d44536caa7072f6308fb2d8feeb3"; # release-26.05
       inputs.nixpkgs.follows = "nixpkgs";
     };
+
+    # NixOS を WSL のディストリビューションとして動作させるモジュール。nixpkgs の
+    # リリースに対応するブランチ (release-26.05) のタグが指すリビジョンで固定する。
+    #
+    # flake-compat は上流が default.nix / shell.nix の互換のためだけに持つ入力であり、
+    # モジュールの評価には使用しない。ブランチ参照のまま flake.lock に残ると
+    # scripts/check-lock.sh の固定の検査に反するため、follows = "" で取り除く。
+    nixos-wsl = {
+      url = "github:nix-community/NixOS-WSL/add6b01c7ca72240046b5d541a74845423f1ee35"; # 2605.7.2
+      inputs.nixpkgs.follows = "nixpkgs";
+      inputs.flake-compat.follows = "";
+    };
   };
 
   outputs =
@@ -20,6 +32,7 @@
       self,
       nixpkgs,
       home-manager,
+      nixos-wsl,
     }:
     let
       systems = [
@@ -53,6 +66,12 @@
       # ユーザー名 (id -un) を使うため、環境ごとに指定せずに済む。
       homeTargets = {
         sabas0ba.system = "x86_64-linux";
+
+        # WSL 上の環境。NixOS-WSL の wsl.defaultUser の既定値が nixos であり、
+        # 改名すると初回の nixos-rebuild まで対象が存在しないことになるため、
+        # 既定値のまま受け入れる。Nix を導入する経路 (Ubuntu 等) でも同名で作成し、
+        # WSL 上の対象を 1 つに揃える。
+        nixos.system = "x86_64-linux";
 
         # Claude Code のリモート実行環境。root で動作する。
         # ホームは /home/<name> の規則から外れるため明示する。
@@ -90,6 +109,19 @@
 
       # ホームディレクトリの構成。`make hm-switch` から適用する。
       homeConfigurations = nixpkgs.lib.mapAttrs mkHomeConfiguration homeTargets;
+
+      # WSL 上の NixOS の system 構成。`make wsl-switch` から適用する。
+      #
+      # 開発用ツールとホームディレクトリの内容は本構成の対象ではない。前者は開発シェル
+      # (nix/devshell.nix)、後者は home-manager (nix/home.nix) が持つ。したがって WSL
+      # でも他の環境と同一の手順 (`nix develop` / `make hm-switch`) となる。
+      nixosConfigurations.wsl = nixpkgs.lib.nixosSystem {
+        system = "x86_64-linux";
+        modules = [
+          nixos-wsl.nixosModules.default
+          ./nix/wsl.nix
+        ];
+      };
 
       # `nix flake check` および `make check` が実行する検査。
       checks = forAllSystems (
