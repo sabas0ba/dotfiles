@@ -131,16 +131,23 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Distro ubunt
 ```bash
 wsl -d NixOS
 
-# 初回の rebuild を行う時点では、まだ本リポジトリの構成が適用されていないため
-# flakes が有効になっていない。この 1 回のみ NIX_CONFIG で補う。
-export NIX_CONFIG='experimental-features = nix-command flakes'
-
+# 配布イメージに git が含まれない場合がある。nix-shell 経由で取得する。
 nix-shell -p git --run 'git clone https://github.com/sabas0ba/dotfiles.git ~/repos/dotfiles'
 cd ~/repos/dotfiles
 
-make wsl-dry      # 適用内容の確認
-make wsl-switch   # system の構成を適用する
+# 初回の rebuild を行う時点では本リポジトリの構成が未適用であり、flakes が有効に
+# なっていない。この 1 回のみ NIX_CONFIG で補う。sudo は環境変数を引き継がないため
+# env で与える (シェルで export しても root には渡らない)。
+sudo env NIX_CONFIG='experimental-features = nix-command flakes' \
+  nixos-rebuild dry-activate --flake '.#wsl'   # 適用内容の確認
+
+sudo env NIX_CONFIG='experimental-features = nix-command flakes' \
+  nixos-rebuild switch --flake '.#wsl'         # system の構成を適用する
 ```
+
+2 回目以降は構成側で flakes が有効になっているため、`make wsl-dry` および
+`make wsl-switch` を使う。sudo はパスワードを要求しない (NixOS-WSL が既定ユーザーに
+対し `security.sudo.wheelNeedsPassword = false` を設定している)。
 
 適用後、`/etc/wsl.conf` の反映のために一度停止する。Windows 側で実行する。
 
@@ -166,8 +173,11 @@ make hm-switch
 ```bash
 wsl -d Ubuntu-24.04
 
-adduser --disabled-password --gecos '' nixos
+# パスワードを設定する。sudo が要求するため --disabled-password では作成しない。
+adduser nixos
 usermod -aG sudo nixos
+
+# bootstrap が配置した隔離の設定に、既定ユーザーの指定を追記する。
 printf '[user]\ndefault = nixos\n' >> /etc/wsl.conf
 ```
 
