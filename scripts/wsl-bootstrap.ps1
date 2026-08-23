@@ -78,21 +78,28 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
 powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Unregister -Name NixOS
 #>
 
+# 値の形式を束縛の時点で制限する。以降、WSL 内のシェルへ渡す値は
+# ConvertTo-ShQuoted で引用するが、想定しない文字はその前に弾く。
 [CmdletBinding()]
 param(
   [ValidateSet('nixos', 'ubuntu')]
   [string]$Distro = 'nixos',
 
+  [ValidatePattern('^[A-Za-z0-9._-]*$')]
   [string]$Name,
 
   [string]$Location,
 
+  [ValidatePattern('^[A-Za-z0-9._/-]+$')]
   [string]$Ref = 'main',
 
+  [ValidatePattern('^https://\S+$')]
   [string]$RepoUrl = 'https://github.com/sabas0ba/dotfiles.git',
 
+  [ValidatePattern('^[a-z_][a-z0-9_-]*$')]
   [string]$User = 'nixos',
 
+  [ValidatePattern('^[A-Za-z0-9._-]+$')]
   [string]$FlakeTarget = 'wsl',
 
   [switch]$Unregister
@@ -130,6 +137,34 @@ $Images = @{
     Sha256      = '9b2f7730dc68227dd04a9f3e5eab86ad85caf556b8606ad94f1f29ff5c4fd3f5'
     DefaultName = 'Ubuntu-24.04'
   }
+}
+
+# WSL 内のシェルへ渡す値を単一引用符で囲む。値に含まれる単一引用符は '\'' で閉じ直す。
+#
+# 後述の手順は sh -lc および nix-shell --run に文字列としてコマンドを渡す。ここへ値を
+# そのまま展開すると、空白を含む値が別の引数に割れ、記号を含む値はシェルに解釈される。
+# 値は利用者が与えるパラメータであるため、引用してから埋める。
+function ConvertTo-ShQuoted {
+  param([Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value)
+
+  return "'" + $Value.Replace("'", "'\''") + "'"
+}
+
+# provision の呼び出し行を組み立てる。段だけが異なるため 1 か所に置く。
+function Get-ProvisionCommand {
+  param([Parameter(Mandatory = $true)][ValidateSet('system', 'home')][string]$Stage)
+
+  $parts = @(
+    (ConvertTo-ShQuoted "$RepoPath/scripts/wsl-provision.sh")
+    $Stage
+    (ConvertTo-ShQuoted $Distro)
+    '--user'
+    (ConvertTo-ShQuoted $User)
+    '--flake-target'
+    (ConvertTo-ShQuoted $FlakeTarget)
+  )
+
+  return ($parts -join ' ')
 }
 
 # wsl.exe を実行し、終了コードを返す。
@@ -346,9 +381,11 @@ else {
   else {
     # NixOS-WSL の配布イメージには git が含まれない。Nix から取る。gitMinimal は
     # perl や curl を伴わないため、この 1 回のために取得する量が小さい。
+    $cloneCommand = 'git clone --branch {0} {1} {2}' -f `
+      (ConvertTo-ShQuoted $Ref), (ConvertTo-ShQuoted $RepoUrl), (ConvertTo-ShQuoted $RepoPath)
     Invoke-Wsl -Arguments @(
       '-d', $Name, '-u', $User, '--',
-      'nix-shell', '-p', 'gitMinimal', '--run', "git clone --branch $Ref $RepoUrl $RepoPath"
+      'nix-shell', '-p', 'gitMinimal', '--run', $cloneCommand
     )
   }
 }
@@ -357,8 +394,7 @@ else {
 Write-Host '  構成    provision の段 system を実行する'
 Invoke-Wsl -Arguments @(
   '-d', $Name, '-u', 'root', '--',
-  'sh', '-lc',
-  "$RepoPath/scripts/wsl-provision.sh system $Distro --user $User --flake-target $FlakeTarget"
+  'sh', '-lc', (Get-ProvisionCommand -Stage 'system')
 )
 
 # --- 5. 反映のための停止 ---
@@ -372,8 +408,7 @@ Wait-WslStopped -DistroName $Name
 Write-Host '  構成    provision の段 home を実行する'
 Invoke-Wsl -Arguments @(
   '-d', $Name, '-u', $User, '--',
-  'sh', '-lc',
-  "$RepoPath/scripts/wsl-provision.sh home $Distro --user $User --flake-target $FlakeTarget"
+  'sh', '-lc', (Get-ProvisionCommand -Stage 'home')
 )
 
 Write-Host ''
