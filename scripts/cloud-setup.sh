@@ -82,14 +82,13 @@ configure_nix() {
   # build-users-group を空にする。root しか存在しないコンテナであり、ビルド用の
   # 利用者 (nixbld) を作れないため。空にしない場合、導入時の nix-env が失敗する。
   #
-  # sandbox と filter-syscalls の無効化は Dockerfile と同じ理由による。コンテナの
-  # seccomp プロファイルと Nix のサンドボックスが競合し、ビルドが失敗する。依存は
-  # すべて cache.nixos.org のバイナリで取得する。
+  # サンドボックスは無効化しない。Dockerfile 側は docker build の seccomp プロファイル
+  # との競合のために無効化しているが、当該環境ではその制約が無く、sandbox と
+  # filter-syscalls を有効にしたまま stdenv を用いるビルドまで成立する (user namespace
+  # が利用できる)。ビルドは root で走るため、無効化すると隔離が失われる。
   printf '%s\n' \
     "$NIX_FLAKE_CONF" \
     'build-users-group =' \
-    'sandbox = false' \
-    'filter-syscalls = false' \
     'max-jobs = auto' \
     >>"$path"
 
