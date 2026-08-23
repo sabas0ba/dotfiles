@@ -36,12 +36,14 @@ jobs:
 
       - name: Pages の設定を取得する
         # actions/configure-pages v5
-        # docs/_config.yml に baseurl を注入する。プロジェクトのサイトは
-        # https://<user>.github.io/<repo>/ に置かれるため、これが無いとリンクが壊れる。
+        #
+        # 引数は与えない。static_site_generator と generator_config_file による
+        # baseurl の注入は、当該 action が .js / .cjs / .mjs しか扱えないため
+        # Jekyll の _config.yml には使えない。baseurl は docs/_config.yml に書く。
+        #
+        # 本手順を残しているのは、Pages が有効化されていない場合にここで明確に
+        # 失敗させるためである。
         uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
-        with:
-          static_site_generator: jekyll
-          generator_config_file: docs/_config.yml
 
       - name: サイトを生成する
         # actions/jekyll-build-pages v1
