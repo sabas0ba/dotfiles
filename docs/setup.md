@@ -116,8 +116,10 @@ git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
 # 版を固定する場合は --depth 1 を外し、以下を続ける。
 #   git -C /opt/dotfiles checkout <40 桁のリビジョン>
 
-/opt/dotfiles/scripts/cloud-setup.sh --setup-script
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable
 ```
+
+`--disposable` は、実行先が使い捨ての環境であることの明示である。本経路は `/usr/local/bin` と `$HOME` を書き換えるため、指定が無ければ実行しない。フックと違い Setup script は Claude Code の起動より前に走るため `CLAUDE_CODE_REMOTE` を持たず、コンテナであることを示す印 (`/.dockerenv`、`/run/.containerenv`、`/proc/1/cgroup`) も当該環境には無い。環境から判定できないため引数で明示する。
 
 本リポジトリは public であり、セッションに紐付いていなくても clone できる (tarball は 403 だが git 経由は通る)。
 
@@ -139,9 +141,9 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 
-- system の同名のコマンド (`git`、coreutils 等) は Nix 版に置き換わる
+- system の同名のコマンド (`git`、coreutils 等) は Nix 版に置き換わる。覆ったものは実行時に列挙する
 - 言語のツールチェーン (Node、Python 等) は含まない。クラウド環境が持つものを使う
-- ホームの構成は home-manager を経由しない (前節のとおり取得できないため)。置く内容は同一で、既存のファイルは上書きする
+- ホームの構成は home-manager を経由しない (前節のとおり取得できないため)。置く内容は同一で、既存のファイルは上書きする。内容が異なるものは初回に `<ファイル名>.dotfiles-backup` へ退避する
 - 初回は数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない
 
 ---
