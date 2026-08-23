@@ -35,7 +35,7 @@ usage() {
 段:
   system   root で実行する。/etc/wsl.conf、ユーザー、Nix、system の構成
   home     利用者で実行する。環境の検査とホームディレクトリへの配置
-  wslconf  /etc/wsl.conf の構成のみを行う。復旧および検査に使う
+  wslconf  wsl.conf の構成のみを行う。復旧および検査に使う (distro は参照しない)
 
 distro:
   nixos   NixOS-WSL。system の構成は nix/wsl.nix が持つ
@@ -243,9 +243,16 @@ provision_system() {
     exit 1
   fi
 
-  step "$wsl_conf を構成する"
-  merge_wsl_conf "$wsl_conf"
-  note "隔離の設定と既定ユーザー ($PROVISION_USER) を反映した"
+  if [ "$distro" = nixos ]; then
+    # NixOS では /etc/wsl.conf は nix/wsl.nix から生成され、Nix store への symlink と
+    # して置かれる。書き込めないため触らない。隔離はこの後の switch で成立する。
+    step "$wsl_conf は nix/wsl.nix が生成する"
+    note "宣言的に管理されているため書き換えない"
+  else
+    step "$wsl_conf を構成する"
+    merge_wsl_conf "$wsl_conf"
+    note "隔離の設定と既定ユーザー ($PROVISION_USER) を反映した"
+  fi
 
   if [ "$distro" = ubuntu ]; then
     step "sudo を構成する"

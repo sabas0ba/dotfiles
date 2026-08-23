@@ -99,9 +99,11 @@ WSL 本体は 2.4.4 以降が必要である (`.wsl` 形式を直接登録でき
 
 目的は、当環境で動作するエージェントやスクリプトが、ホスト側のシステムファイルや、認証済みの CLI (gh / az / aws / gcloud 等) に到達しないようにすることである。規約による禁止ではなく到達経路の遮断によって担保する。
 
-設定の実体は 2 か所にある。`/etc/wsl.conf` は [`scripts/wsl-provision.sh`](scripts/wsl-provision.sh) が両経路で書く。NixOS ではさらに [`nix/wsl.nix`](nix/wsl.nix) の `wsl.wslConf` および `wsl.interop` が同じ内容を宣言的に生成し、`nixos-rebuild switch` のたびに再生成する。いずれの経路でも満たすべき結果は [`scripts/check-wsl-isolation.sh`](scripts/check-wsl-isolation.sh) が 1 か所で定義し、`make check` に含まれる。
+設定の実体は経路ごとに異なる。NixOS では [`nix/wsl.nix`](nix/wsl.nix) の `wsl.wslConf` および `wsl.interop` が `/etc/wsl.conf` を宣言的に生成する。生成物は Nix store への symlink であり書き込めないため、provision は当該経路ではこのファイルに触れない。Ubuntu では [`scripts/wsl-provision.sh`](scripts/wsl-provision.sh) が書く。
 
-`/etc/wsl.conf` は丸ごと上書きせず、自分が管理するキーだけを差し替える。イメージが出荷時に持つ設定 (Ubuntu の `[boot] systemd` 等) を消すと以降の処理が成立しないため。
+いずれの経路でも満たすべき結果は [`scripts/check-wsl-isolation.sh`](scripts/check-wsl-isolation.sh) が 1 か所で定義し、`make check` に含まれる。
+
+Ubuntu 側では `/etc/wsl.conf` を丸ごと上書きせず、自分が管理するキーだけを差し替える。イメージが出荷時に持つ設定 (`[boot] systemd` 等) を消すと以降の処理が成立しないため。この差し替えは [`scripts/test-wsl-conf.sh`](scripts/test-wsl-conf.sh) が検査する。
 
 隔離を解除する場合は、手元の `/etc/wsl.conf` を書き換えるのではなく、上記の定義を変更して commit する。NixOS では手元の変更は次の `make wsl-switch` で元に戻る。
 
@@ -144,12 +146,13 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Unregister
 | | NixOS-WSL | Ubuntu |
 | --- | --- | --- |
 | 登録直後の利用者 | `nixos` (イメージの既定) | root。bootstrap が `nixos` を作成する |
-| 段 system が行うこと | `/etc/wsl.conf`、`nixos-rebuild switch --flake .#wsl` | `/etc/wsl.conf`、sudo、Nix の導入 |
+| 段 system が行うこと | `nixos-rebuild switch --flake .#wsl` | `/etc/wsl.conf`、sudo、Nix の導入 |
+| `/etc/wsl.conf` | `nix/wsl.nix` が生成する (provision は触らない) | provision が差し替える |
 | sudo | NixOS-WSL がパスワードを要求しない設定を持つ | provision が `/etc/sudoers.d/nixos` に NOPASSWD を置く |
 
 sudo にパスワードを設けないのは、WSL では `wsl.exe -u root` で無条件に root になれるため、パスワードが境界として機能しないことによる。NixOS-WSL の既定に揃えてある。
 
-隔離が成立する時点についても述べる。`/etc/wsl.conf` を書くのは段 system であり、それより前に動くのは利用者の作成とリポジトリの取得だけである。いずれも Windows 側を参照しないため、利用者が対話セッションに入る時点では隔離が成立している。
+隔離が成立する時点についても述べる。成立するのは段 system の完了時 (NixOS では switch、Ubuntu では `/etc/wsl.conf` の差し替え) であり、それより前に動くのは利用者の作成とリポジトリの取得だけである。いずれも Windows 側を参照しない。bootstrap は段 system の直後に停止を行うため、利用者が対話セッションに入る時点では隔離が成立している。
 
 ### 構築後の操作
 

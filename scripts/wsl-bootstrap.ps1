@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
 WSL に本リポジトリの環境を構築する。取得から利用可能な状態までを一度に行う。
 
@@ -110,31 +110,74 @@ $Images = @{
   }
 }
 
+# wsl.exe を実行し、終了コードを返す。
+#
+# $ErrorActionPreference = 'Stop' のもとで native コマンドの stderr を扱うと、
+# Windows PowerShell 5.1 は 1 行ごとに ErrorRecord (NativeCommandError) を作る。
+# これは終了コードが 0 であっても発生し、Stop のもとでは実行が中断される。wsl.exe は
+# 正常時にも警告を stderr へ出すため、この間だけ Continue に下げ、成否は終了コード
+# だけで判断する。
+function Start-Wsl {
+  param(
+    [Parameter(Mandatory = $true)][string[]]$Arguments,
+    [switch]$Quiet
+  )
+
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    # 出力はコンソールへ直接流す。関数の戻り値に混ざると、呼び出し側が受け取るのは
+    # 終了コードではなく出力全体と終了コードの配列になる。
+    if ($Quiet) {
+      & wsl.exe @Arguments 2>&1 | Out-Null
+    }
+    else {
+      & wsl.exe @Arguments | Out-Host
+    }
+  }
+  finally {
+    $ErrorActionPreference = $previous
+  }
+
+  return $LASTEXITCODE
+}
+
 function Invoke-Wsl {
   param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
-  & wsl.exe @Arguments
-  if ($LASTEXITCODE -ne 0) {
-    throw "wsl.exe の実行に失敗しました (終了コード $LASTEXITCODE): wsl $($Arguments -join ' ')"
+  $code = Start-Wsl -Arguments $Arguments
+  if ($code -ne 0) {
+    throw "wsl.exe の実行に失敗しました (終了コード $code): wsl $($Arguments -join ' ')"
   }
 }
 
-# 終了コードだけを見る。失敗を例外にしないため Invoke-Wsl とは分けてある。
+# 成否だけを見る。失敗を例外にしないため Invoke-Wsl とは分けてある。
 function Test-Wsl {
   param([Parameter(Mandatory = $true)][string[]]$Arguments)
 
-  & wsl.exe @Arguments *> $null
-  return ($LASTEXITCODE -eq 0)
+  return ((Start-Wsl -Arguments $Arguments -Quiet) -eq 0)
 }
 
 function Test-WslRegistered {
   param([Parameter(Mandatory = $true)][string]$DistroName)
 
-  $registered = & wsl.exe --list --quiet
+  $previous = $ErrorActionPreference
+  $ErrorActionPreference = 'Continue'
+  try {
+    $registered = & wsl.exe --list --quiet
+  }
+  finally {
+    $ErrorActionPreference = $previous
+  }
+
   if ($LASTEXITCODE -ne 0) {
     return $false
   }
-  $names = $registered -split "`r?`n" | ForEach-Object { $_.Trim() }
+
+  # wsl.exe は UTF-16LE で出力する。PowerShell 5.1 はこれをコンソールの
+  # コードページとして復号するため、各文字の間に NUL が残る。名前は ASCII の
+  # 範囲であるため、NUL を除くと正しい名前が得られる。
+  $names = $registered -split "`r?`n" | ForEach-Object { ($_ -replace "`0", '').Trim() }
   return ($names -contains $DistroName)
 }
 
@@ -238,10 +281,11 @@ else {
     )
   }
   else {
-    # NixOS-WSL の配布イメージには git が含まれない。Nix から取る。
+    # NixOS-WSL の配布イメージには git が含まれない。Nix から取る。gitMinimal は
+    # perl や curl を伴わないため、この 1 回のために取得する量が小さい。
     Invoke-Wsl -Arguments @(
       '-d', $Name, '-u', $User, '--',
-      'nix-shell', '-p', 'git', '--run', "git clone --branch $Ref $RepoUrl $RepoPath"
+      'nix-shell', '-p', 'gitMinimal', '--run', "git clone --branch $Ref $RepoUrl $RepoPath"
     )
   }
 }

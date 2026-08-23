@@ -225,6 +225,17 @@ else
   if grep -qiE 'Invoke-WebRequest[^\n]*(\.sha256|SHA256SUMS)' "$bootstrap"; then
     fail "scripts/wsl-bootstrap.ps1 が配布元から取得した sha256 と照合しています"
   fi
+
+  # BOM があること。
+  #
+  # Windows PowerShell 5.1 は BOM の無い .ps1 をシステムの ANSI コードページとして
+  # 読む。日本語環境では Shift_JIS と解釈され、UTF-8 の多バイト文字が壊れて構文
+  # エラーになる。BOM は見えないため、失われたことに気付けるよう検査する。
+  if [ "$(od -An -tx1 -N3 "$bootstrap" | tr -d ' \n')" = "efbbbf" ]; then
+    ok "scripts/wsl-bootstrap.ps1 に UTF-8 の BOM がある"
+  else
+    fail "scripts/wsl-bootstrap.ps1 に UTF-8 の BOM がありません (PowerShell 5.1 が Shift_JIS として読みます)"
+  fi
 fi
 
 echo
