@@ -231,10 +231,54 @@ enable_flakes() {
   note "flakes を有効にした ($path)"
 }
 
+# nix の git fetcher (libgit2) は、リポジトリの所有者が実行ユーザーと異なる場合に
+# 開くことを拒否する。nixos-rebuild は root で動く一方、リポジトリは利用者のもので
+# あるため、当該パスを例外として登録する。
+#
+# これは provision だけの問題ではない。以降 make wsl-switch を実行するたびに同じ経路
+# を通るため、恒久的な設定として置く。対象はこのリポジトリのパスに限る ('*' は使わない)。
+#
+# git コマンドは使わない。NixOS では初回の switch まで root の PATH に git が無い。
+ensure_root_safe_directory() {
+  local path=/root/.gitconfig
+
+  if [ -f "$path" ] && grep -qF "directory = $repo" "$path"; then
+    note "safe.directory は登録済み ($repo)"
+    return
+  fi
+
+  printf '[safe]\n\tdirectory = %s\n' "$repo" >>"$path"
+  note "root の safe.directory に $repo を登録した ($path)"
+}
+
 apply_nixos_system() {
+  local expected
+
   # 初回は本リポジトリの構成が未適用であり flakes が有効になっていないため、
   # NIX_CONFIG で補う。2 回目以降は nix/wsl.nix が同じ設定を持つ。
-  NIX_CONFIG=$NIX_FLAKE_CONF nixos-rebuild switch --flake "$repo#wsl"
+  expected=$(
+    NIX_CONFIG=$NIX_FLAKE_CONF nix build --no-link --print-out-paths \
+      "$repo#nixosConfigurations.wsl.config.system.build.toplevel"
+  )
+
+  if NIX_CONFIG=$NIX_FLAKE_CONF nixos-rebuild switch --flake "$repo#wsl"; then
+    return
+  fi
+
+  # nixos-rebuild は systemd の user unit を再読込できなかった場合にも非零で終わる。
+  # WSL では対話セッションの外に user session が無いため、provision からの実行では
+  # これが起きる。system 側の切り替えは完了しているため、終了コードではなく実際に
+  # 入れ替わったかどうかで判断する。
+  if [ "$(readlink -f /run/current-system)" = "$expected" ]; then
+    note "user unit の再読込には失敗したが、system の構成は適用されている"
+    note "user session は次回の起動で開始する"
+    return
+  fi
+
+  echo "エラー: system の構成を適用できませんでした。" >&2
+  echo "  期待した構成: $expected" >&2
+  echo "  現在の構成:   $(readlink -f /run/current-system)" >&2
+  exit 1
 }
 
 provision_system() {
@@ -264,6 +308,9 @@ provision_system() {
   fi
 
   if [ "$distro" = nixos ]; then
+    step "root から本リポジトリを読めるようにする"
+    ensure_root_safe_directory
+
     step "system の構成を適用する"
     apply_nixos_system
   fi
