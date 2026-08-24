@@ -147,6 +147,22 @@ Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは
 - 本経路では `DOTFILES_ENV` が設定されない。`scripts/check-env.sh` はコマンドの実体が Nix の store にあることで判定するため、開発シェルを経由せずそのまま実行して成功する
 - 初回は数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない
 
+## ChatGPT Codex のクラウド環境
+
+Codex のクラウド環境では、Environment の Setup script に以下を設定する。本リポジトリには Codex 向けの自動実行 hook を置いていないため、本リポジトリを対象にする場合もこの設定を使用する。
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable
+```
+
+版を固定する場合、`--depth 1` を外し、`git -C /opt/dotfiles checkout <40 桁のリビジョン>` を setup script に加える。処理内容、既存ファイルの退避、再現性の例外および到達範囲の制約は、前節の「[他のリポジトリで使う](#他のリポジトリで使う)」と同じである。
+
+セットアップにより `home/.codex/AGENTS.md` が `~/.codex/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
+
 ---
 
 [目次に戻る](index.md)

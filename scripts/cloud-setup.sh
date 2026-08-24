@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Claude Code のリモート実行環境 (クラウド) を構成する。
+# Claude Code および Codex のリモート実行環境 (クラウド) を構成する。
 #
 # 当該環境はセッションごとに用意される Ubuntu のコンテナであり、初期状態では Nix が
 # 無い。本スクリプトは docs/setup.md と同じ手順で Nix を導入し、開発シェルを profile
@@ -11,7 +11,7 @@
 #
 #   hook          本リポジトリの .claude/settings.json の SessionStart フックから。
 #                 開発シェルの環境をセッションに引き渡す
-#   setup-script  クラウド環境の Setup script から。他のリポジトリのセッションでも
+#   setup-script  Claude Code または Codex の Setup script から。他のリポジトリでも
 #                 本環境を使うための経路であり、ツールとホームの構成を配置する。
 #                 system と $HOME を書き換えるため --disposable の明示を要する
 #
@@ -81,8 +81,8 @@ fi
 if [ "$mode" = setup-script ] && [ "$disposable" -ne 1 ]; then
   echo "エラー: --setup-script には --disposable が必要です。" >&2
   echo >&2
-  echo "本経路は /usr/local/bin と \$HOME を書き換えます。使い捨ての環境 (Claude Code の" >&2
-  echo "リモート実行環境等) でのみ実行してください。手元の環境では nix develop または" >&2
+  echo "本経路は /usr/local/bin と \$HOME を書き換えます。使い捨てのクラウド実行環境" >&2
+  echo "でのみ実行してください。手元の環境では nix develop または" >&2
   echo "direnv を使います (docs/setup.md)。" >&2
   echo >&2
   echo "  scripts/cloud-setup.sh --setup-script --disposable" >&2

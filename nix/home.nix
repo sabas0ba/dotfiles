@@ -19,10 +19,15 @@
     # home/ 以下をホームディレクトリの構造に対応させる。
     #
     # recursive = true はディレクトリ自体ではなくその配下のファイルを個別に
-    # symlink する。~/.claude のように home-manager の管理外のファイルが既に
+    # symlink する。~/.claude や ~/.codex のように home-manager の管理外のファイルが既に
     # 存在するディレクトリを、丸ごと置き換えてしまわないようにするため。
     file.".claude" = {
       source = ../home/.claude;
+      recursive = true;
+    };
+
+    file.".codex" = {
+      source = ../home/.codex;
       recursive = true;
     };
   };
