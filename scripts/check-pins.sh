@@ -8,7 +8,7 @@
 # flake の入力 (nixpkgs / home-manager) は scripts/check-lock.sh が担当する。本
 # スクリプトはそれ以外を対象とする。
 #
-# ネットワークを使用しない。作業木の内容のみを検査する。
+# ネットワークを使用しない。working tree の内容のみを検査する。
 #
 #   使用方法: scripts/check-pins.sh [リポジトリのルート]
 set -euo pipefail

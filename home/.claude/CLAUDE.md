@@ -2,7 +2,7 @@
 
 Claude Code に対する利用者全体の作業指示。特定のリポジトリに閉じない共通規約を定義する。リポジトリ固有の指示は各リポジトリの `CLAUDE.md` に置き、本ファイルより優先する。
 
-本ファイルの正本は [sabas0ba/dotfiles](https://github.com/sabas0ba/dotfiles) にあり、随時更新される。配置済みの内容が古くなっている可能性があるため、たまに正本を参照し、更新があれば配置を更新する。
+本ファイルの master は [sabas0ba/dotfiles](https://github.com/sabas0ba/dotfiles) にあり、随時更新される。配置済みの内容が古くなっている可能性があるため、たまに master を参照し、更新があれば配置を更新する。
 
 ## 応答
 
