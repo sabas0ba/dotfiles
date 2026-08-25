@@ -31,6 +31,10 @@ Claude Code のクラウド環境 ([claude.ai/code](https://claude.ai/code)):
 
 リポジトリを開くだけでよい。SessionStart フックが開始時に環境を構成する。環境側に指定する設定は [セットアップ](docs/setup.md#claude-code-のクラウド環境) を参照する。
 
+ChatGPT Codex のクラウド環境 ([公式ドキュメント](https://learn.chatgpt.com/docs/environments/cloud-environment)):
+
+Environment の Setup script に設定が必要となる。設定内容は [セットアップ](docs/setup.md#chatgpt-codex-のクラウド環境) を参照する。
+
 ## ドキュメント
 
 - [セットアップ](docs/setup.md) — Nix の導入から開発シェルに入るまで
