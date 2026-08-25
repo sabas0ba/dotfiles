@@ -101,6 +101,8 @@ repo=$(cd "$script_dir/.." && pwd)
 
 # shellcheck source=scripts/nix-pin.sh
 . "$script_dir/nix-pin.sh"
+# shellcheck source=scripts/cloud-home.sh
+. "$script_dir/cloud-home.sh"
 
 # 実体化した開発シェルの配置先。Dockerfile が使う名前と揃える。
 readonly DOTFILES_PROFILE=/nix/var/nix/profiles/dotfiles-dev
@@ -361,28 +363,9 @@ install_toolchain() {
 # 退避し、退避先を出力する。退避は 1 度だけ行う。再実行のたびに上書きすると、本処理が
 # 置いた内容で元の状態が置き換わるためである。
 install_home() {
-  local source target backup
-
-  while IFS= read -r source; do
-    case "$source" in
-      "$repo/home/.codex/"*)
-        # Codex は設定の基点を CODEX_HOME から探索する。Cloud runtime では
-        # HOME/.codex と異なるため、.codex 以下はそちらへ対応させる。
-        target=${CODEX_HOME:-"$HOME/.codex"}/${source#"$repo/home/.codex/"}
-        ;;
-      *) target=$HOME/${source#"$repo/home/"} ;;
-    esac
-    backup=$target.dotfiles-backup
-    mkdir -p "$(dirname "$target")"
-
-    if [ -e "$target" ] && [ ! -e "$backup" ] && ! cmp -s "$source" "$target"; then
-      cp -p "$target" "$backup"
-      note "退避した ${backup#"$HOME/"}"
-    fi
-
-    cp -f "$source" "$target"
-    note "配置した ${target#"$HOME/"}"
-  done < <(find "$repo/home" -type f)
+  # Codex は設定の基点を CODEX_HOME から探索する。Cloud runtime では HOME/.codex
+  # と異なるため、呼び出し側で fallback を解決して補助関数へ渡す。
+  dotfiles_install_home "$repo" "$HOME" "${CODEX_HOME:-$HOME/.codex}"
 }
 
 # --- 実行 --------------------------------------------------------------------

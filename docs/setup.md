@@ -105,25 +105,58 @@ nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 
 ### 他のリポジトリで使う
 
-本リポジトリ以外の開発で本環境を使う場合は、クラウド環境の Setup script に以下を書く。フックは本リポジトリにしか無いため、環境の側から入れる。
+本リポジトリ以外の開発で本環境を使う場合は、クラウド環境の Setup script に以下を書く。フックは本リポジトリにしか無いため、環境の側から入れる。`DOTFILES_REV` は利用する40桁の commit SHAへ置き換える。branch や tag は指定できない。
 
 ```bash
 #!/bin/bash
 set -euo pipefail
 
-git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
+DOTFILES_REV=${DOTFILES_REV:-REPLACE_WITH_40_HEX_COMMIT_SHA}
+DOTFILES_URL=https://github.com/sabas0ba/dotfiles.git
+DOTFILES_DIR=/opt/dotfiles
 
-# 版を固定する場合は --depth 1 を外し、以下を続ける。
-#   git -C /opt/dotfiles checkout <40 桁のリビジョン>
+if [[ ! "$DOTFILES_REV" =~ ^[0-9a-fA-F]{40}$ ]]; then
+  echo "DOTFILES_REV に40桁の commit SHAを指定してください。" >&2
+  exit 1
+fi
 
-/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable
+if [ -e "$DOTFILES_DIR" ] && [ ! -d "$DOTFILES_DIR/.git" ]; then
+  echo "$DOTFILES_DIR は dotfiles の checkout ではありません。" >&2
+  exit 1
+fi
+
+if [ ! -d "$DOTFILES_DIR/.git" ]; then
+  git clone --no-checkout "$DOTFILES_URL" "$DOTFILES_DIR"
+else
+  origin=$(git -C "$DOTFILES_DIR" remote get-url origin)
+  if [ "${origin%.git}" != "${DOTFILES_URL%.git}" ]; then
+    echo "$DOTFILES_DIR の origin が異なります: $origin" >&2
+    exit 1
+  fi
+  if [ -n "$(git -C "$DOTFILES_DIR" status --porcelain --untracked-files=normal)" ]; then
+    echo "$DOTFILES_DIR に未コミットの変更があります。" >&2
+    exit 1
+  fi
+fi
+
+git -C "$DOTFILES_DIR" fetch --depth 1 origin "$DOTFILES_REV"
+resolved=$(git -C "$DOTFILES_DIR" rev-parse --verify 'FETCH_HEAD^{commit}')
+if [ "$resolved" != "${DOTFILES_REV,,}" ]; then
+  echo "取得した commit が DOTFILES_REV と一致しません。" >&2
+  exit 1
+fi
+git -C "$DOTFILES_DIR" checkout --detach "$resolved"
+
+"$DOTFILES_DIR/scripts/cloud-setup.sh" --setup-script --disposable
 ```
+
+途中で Nix の取得や build が失敗しても、同じ `DOTFILES_REV` でそのまま再実行できる。既存 checkout の origin と working tree を確認してから再利用するため、別の repository や編集済みファイルを上書きしない。
 
 `--disposable` は、実行先が使い捨ての環境であることの明示である。本経路は `/usr/local/bin` と `$HOME` を書き換えるため、指定が無ければ実行しない。フックと違い Setup script は Claude Code の起動より前に走るため `CLAUDE_CODE_REMOTE` を持たず、コンテナであることを示す印 (`/.dockerenv`、`/run/.containerenv`、`/proc/1/cgroup`) も当該環境には無い。環境から判定できないため引数で明示する。
 
 本リポジトリは public であり、セッションに紐付いていなくても clone できる (tarball は 403 だが git 経由は通る)。
 
-ここでは本リポジトリを固定しない。常に最新を使う運用であり、[再現性](reproducibility.md)における唯一の例外である。使用したリビジョンは `--setup-script` が最初に出力する。後から見る場合は clone を直接見る。
+本リポジトリ自身も `DOTFILES_REV` で固定する。使用したリビジョンは `--setup-script` が最初に出力する。後から見る場合は checkout を直接見る。
 
 ```bash
 git -C /opt/dotfiles log -1 --format='%H %cs %s'
@@ -149,17 +182,7 @@ Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは
 
 ## ChatGPT Codex のクラウド環境
 
-Codex のクラウド環境では、Environment の Setup script に以下を設定する。本リポジトリには Codex 向けの自動実行 hook を置いていないため、本リポジトリを対象にする場合もこの設定を使用する。
-
-```bash
-#!/bin/bash
-set -euo pipefail
-
-git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
-/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable
-```
-
-版を固定する場合、`--depth 1` を外し、`git -C /opt/dotfiles checkout <40 桁のリビジョン>` を setup script に加える。処理内容、既存ファイルの退避、再現性の例外および到達範囲の制約は、前節の「[他のリポジトリで使う](#他のリポジトリで使う)」と同じである。
+Codex のクラウド環境では、Environment の Setup script に前節の「[他のリポジトリで使う](#他のリポジトリで使う)」にある共通 script を設定する。本リポジトリには Codex 向けの自動実行 hook を置いていないため、本リポジトリを対象にする場合も同じ設定を使用する。処理内容、既存ファイルの退避、revision の固定および到達範囲の制約も同じである。
 
 セットアップにより `home/.codex/AGENTS.md` が `${CODEX_HOME:-$HOME/.codex}/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。Codex のクラウド環境では `CODEX_HOME=/opt/codex` のため、配置先は `/opt/codex/AGENTS.md` となる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
 

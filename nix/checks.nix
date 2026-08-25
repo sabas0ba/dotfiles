@@ -49,6 +49,16 @@ in
     bash scripts/test-wsl-conf.sh
   '';
 
+  # Cloud Setup の home/ 配置先、CODEX_HOME の fallback、backup の一回性。
+  cloud-home = mkCheck "cloud-home" [ pkgs.bashInteractive pkgs.coreutils pkgs.findutils ] ''
+    bash scripts/test-cloud-home.sh
+  '';
+
+  # hook や permission の JSON が壊れると設定全体が読み込まれない。
+  settings-json = mkCheck "settings-json" [ pkgs.jq ] ''
+    jq -e 'type == "object"' .claude/settings.json home/.claude/settings.json >/dev/null
+  '';
+
   # シェルスクリプトの静的解析。.envrc も bash として検査する。
   shellcheck = mkCheck "shellcheck" [ pkgs.shellcheck ] ''
     shellcheck scripts/*.sh
