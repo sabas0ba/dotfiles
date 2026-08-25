@@ -43,6 +43,20 @@ in
     bash scripts/check-pins.sh
   '';
 
+  # NixOS-WSL の revision とタグコメントを原子的に更新すること。置換対象が不完全な
+  # 場合に片方だけを書き換えた状態を残さないことも fixture で検査する。
+  update-pins =
+    mkCheck "update-pins"
+      [
+        pkgs.bashInteractive
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.gnused
+      ]
+      ''
+        bash scripts/test-update-pins.sh
+      '';
+
   # /etc/wsl.conf のマージが、管理外の記述を保ちつつ自分のキーだけを差し替えること。
   # 本リポジトリで唯一の非自明なテキスト処理であり、読んだだけでは確かめられない。
   wsl-conf = mkCheck "wsl-conf" [ pkgs.bashInteractive ] ''
