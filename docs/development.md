@@ -118,7 +118,8 @@ PR の作成には外部 action を使わず、ランナー同梱の `gh` と `G
 - シェル: bash または POSIX sh。先頭に `set -euo pipefail` (sh では `set -eu`) を記述する。`shellcheck` を通し、`shfmt --indent 2 --case-indent` で整形する
 - PowerShell: `scripts/wsl-bootstrap.ps1` のみ。静的解析器 (PSScriptAnalyzer) は依存が増えるため導入していない。したがって判断を伴う処理は `scripts/wsl-provision.sh` (shellcheck と `nix flake check` の対象) に置き、bootstrap には provision がまだ存在しない時点でしか実行できないものだけを残す。ファイルは UTF-8 の BOM 付きで保存する (`make check` が検査する)
 - コメント: 実装内容ではなく、その選択の理由を記述する。既存ファイルに合わせて日本語で記述する
-- 整形は手作業ではなく `make fmt` で行う
+- 整形は手作業ではなく `make fmt` で行う。引数なしの `nix fmt` は `.git`、`.direnv`、
+  `.work` を探索対象から除外する
 
 ## コミット
 
