@@ -55,6 +55,84 @@
           )
         );
 
+      mkToolchainOutputs =
+        pkgs: profileName: profile:
+        let
+          commandManifestPackage = pkgs.writeTextDir "share/dotfiles/required-commands" ''
+            ${pkgs.lib.concatStringsSep "\n" profile.commands}
+          '';
+          commandManifest = "${commandManifestPackage}/share/dotfiles/required-commands";
+
+          profileEnvironmentValues = profile.env // {
+            DOTFILES_COMMAND_MANIFEST = commandManifest;
+            DOTFILES_TOOLCHAIN_PROFILE = profileName;
+          };
+          environmentLines = pkgs.lib.mapAttrsToList (
+            name: value: "export ${name}=${pkgs.lib.escapeShellArg value}"
+          ) profileEnvironmentValues;
+          profileEnvironmentPackage = pkgs.writeTextDir "share/dotfiles/environment" ''
+            # shellcheck shell=sh
+            ${pkgs.lib.concatStringsSep "\n" environmentLines}
+          '';
+          profileEnvironment = "${profileEnvironmentPackage}/share/dotfiles/environment";
+
+          toolchainInfo = pkgs.writeShellApplication {
+            name = "dotfiles-toolchain-info";
+            runtimeInputs = [ pkgs.coreutils ];
+            text = ''
+              case "''${1:-}" in
+                name)
+                  printf '%s\n' ${pkgs.lib.escapeShellArg profileName}
+                  ;;
+                commands)
+                  cat ${pkgs.lib.escapeShellArg commandManifest}
+                  ;;
+                environment)
+                  cat ${pkgs.lib.escapeShellArg profileEnvironment}
+                  ;;
+                environment-file)
+                  printf '%s\n' ${pkgs.lib.escapeShellArg profileEnvironment}
+                  ;;
+                *)
+                  echo "使用方法: dotfiles-toolchain-info {name|commands|environment|environment-file}" >&2
+                  exit 2
+                  ;;
+              esac
+            '';
+          };
+
+          metadataPackages = [
+            commandManifestPackage
+            profileEnvironmentPackage
+            toolchainInfo
+          ];
+        in
+        {
+          devShell = import ./nix/devshell.nix {
+            inherit
+              commandManifest
+              metadataPackages
+              pkgs
+              profile
+              profileEnvironment
+              profileName
+              ;
+          };
+
+          package = pkgs.buildEnv {
+            name = "dotfiles-toolchain-${profileName}";
+            paths = profile.packages ++ metadataPackages;
+          };
+        };
+
+      toolchainOutputs = forAllSystems (
+        pkgs:
+        let
+          catalog = import ./nix/packages.nix { inherit pkgs; };
+        in
+        pkgs.lib.mapAttrs (mkToolchainOutputs pkgs) catalog.profiles
+      );
+
       # ユーザー名とプラットフォームからホームディレクトリを導出する。
       # 規則から外れる対象は homeTargets 側で homeDirectory を明示する。
       defaultHomeDirectory =
@@ -93,19 +171,16 @@
         };
     in
     {
-      # `nix develop` および direnv の `use flake` が使用する開発シェル。
-      devShells = forAllSystems (pkgs: {
-        default = import ./nix/devshell.nix { inherit pkgs; };
-      });
+      # `nix develop .#<profile>` が使用する用途別の開発シェル。
+      # direnv の `use flake` は軽量な default を選択する。
+      devShells = nixpkgs.lib.mapAttrs (
+        _system: profiles: nixpkgs.lib.mapAttrs (_name: output: output.devShell) profiles
+      ) toolchainOutputs;
 
-      # ツール一式を 1 つの profile にまとめたもの。Dockerfile およびホストへの
-      # `nix profile install` から使用する。
-      packages = forAllSystems (pkgs: {
-        default = pkgs.buildEnv {
-          name = "dotfiles-toolchain";
-          paths = import ./nix/packages.nix { inherit pkgs; };
-        };
-      });
+      # `nix build .#<profile>`、Dockerfile および `nix profile install` が使用する。
+      packages = nixpkgs.lib.mapAttrs (
+        _system: profiles: nixpkgs.lib.mapAttrs (_name: output: output.package) profiles
+      ) toolchainOutputs;
 
       # ホームディレクトリの構成。`make hm-switch` から適用する。
       homeConfigurations = nixpkgs.lib.mapAttrs mkHomeConfiguration homeTargets;

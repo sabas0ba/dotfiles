@@ -5,6 +5,8 @@ SHELL := /usr/bin/env bash
 
 DOCKER_IMAGE ?= dotfiles-dev
 NIX ?= nix
+# nix/packages.nix に定義した用途別 toolchain。default は軽量な保守環境。
+TOOLCHAIN_PROFILE ?= default
 # home-manager の適用対象。flake.nix の homeTargets に定義した名前を指定する。
 # 既定は実行中のユーザー名。環境ごとに指定せずに済むようにするため。
 HM_TARGET ?= $(shell id -un)
@@ -19,8 +21,12 @@ help: ## 本ヘルプを表示する
 # --- ホスト側の環境 ---------------------------------------------------------
 
 .PHONY: shell
-shell: ## 開発シェルに入る (direnv 未使用時)
-	$(NIX) develop
+shell: ## 開発シェルに入る (TOOLCHAIN_PROFILE=software 等で選択)
+	$(NIX) develop '.#$(TOOLCHAIN_PROFILE)'
+
+.PHONY: toolchain-build
+toolchain-build: ## toolchain profile を構築する (配置は行わない)
+	$(NIX) build --no-link --print-out-paths '.#$(TOOLCHAIN_PROFILE)'
 
 .PHONY: lock
 lock: ## flake.lock を生成する
@@ -66,10 +72,13 @@ bump-hm: ## home-manager の rev を更新する (make bump-hm REV=<40 桁の re
 bump-help: ## 固定の更新方法を表示する
 	scripts/update-pins.sh --help
 
-.PHONY: check
-check: ## すべての検査を実行する (nix flake check + 環境のスモークテスト)
+.PHONY: check check-all-systems
+check: check-all-systems ## すべての検査を実行する (flake check + 環境のスモークテスト)
 	$(NIX) flake check
 	scripts/check-env.sh
+
+check-all-systems: ## 全対応 platform の flake output を評価する (構築は行わない)
+	$(NIX) flake check --all-systems --no-build
 
 .PHONY: fmt
 fmt: ## Nix およびシェルスクリプトを整形する
@@ -152,8 +161,10 @@ wsl-isolation: ## WSL が Windows 側から隔離されていることを検査�
 # --- コンテナ側の環境 -------------------------------------------------------
 
 .PHONY: docker-build
-docker-build: ## 同一の環境を持つコンテナイメージを構築する
-	docker build -t $(DOCKER_IMAGE) .
+docker-build: ## 選択した toolchain のコンテナイメージを構築する
+	docker build \
+		--build-arg DOTFILES_TOOLCHAIN_PROFILE=$(TOOLCHAIN_PROFILE) \
+		-t $(DOCKER_IMAGE) .
 
 .PHONY: docker-shell
 docker-shell: docker-build ## コンテナ内の開発シェルに入る

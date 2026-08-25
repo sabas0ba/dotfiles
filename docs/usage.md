@@ -14,6 +14,43 @@ make shell         # 開発シェルに入る (direnv 未使用時)
 
 ツールを開発シェルの外から導入しない。`apt install` / `brew install` / `npm install -g` / `pip install --user` は再現性を損なう。必要なツールは [`nix/packages.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/packages.nix) に追記して取得する。
 
+## Toolchain profile
+
+既定の `nix develop` と direnv は、dotfiles の保守に必要な `default` profile だけを導入する。容量の大きいコンパイラ、コンテナ、HDL、browser は用途別 profile を明示して取得する。
+
+| Profile | 主な内容 | 対応 platform |
+| --- | --- | --- |
+| `default` | Git、Nix・shell の formatter/linter、基本 utility | Linux / Darwin |
+| `software` | Python、Rust、Zig、native C/C++、CMake、Ninja、Node.js、TypeScript | Linux / Darwin |
+| `containers` | Docker CLI、Podman、QEMU | Linux / Darwin。Podman は Linux のみ |
+| `hdl` | Veryl、Verible、Verilator、native C/C++ | Linux / Darwin。Verible は Linux のみ |
+| `browser` | TypeScript、Playwright と Chromium/Firefox/WebKit | Linux のみ |
+| `full` | 現在の platform で利用可能な上記すべて | Linux / Darwin |
+
+開発シェルと通常の Nix package は同じ profile 名を使う。
+
+```bash
+nix develop .#software
+make shell TOOLCHAIN_PROFILE=hdl
+
+nix build .#containers
+make toolchain-build TOOLCHAIN_PROFILE=full
+```
+
+`scripts/check-env.sh` の検査対象も選択した profile に追従する。コマンド一覧を shell script 側で重複管理せず、`nix/packages.nix` の各 package と対応付けたコマンド契約から生成する。
+
+Playwright の browser path は `nix develop .#browser` と Docker では自動的に設定される。`nix build .#browser` の出力を PATH へ直接載せる場合は、同じ出力に含まれる環境定義も読み込む。
+
+```bash
+out=$(nix build --no-link --print-out-paths .#browser)
+export PATH="$out/bin:$PATH"
+. "$out/share/dotfiles/environment"
+```
+
+プロジェクト側で `@playwright/test` または `playwright` を依存に持つ場合、その version は `nix/packages.nix` が固定する `playwright-driver.browsers` と一致させる。version が異なる browser を実行時に download しない。
+
+`containers` は CLI と仮想化 tool を提供するだけである。Docker daemon、Podman の user namespace、QEMU/KVM などの権限と system service はホスト側で構成する。
+
 ## ホームディレクトリの構成
 
 ホームディレクトリの内容は home-manager で宣言的に管理する。管理対象は 2 種類ある。
@@ -66,15 +103,16 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 ホストと同一の環境をコンテナ内に構築する。`Dockerfile` はツールの一覧を持たず `flake.nix` を評価するため、内容がホストと一致する。
 
 ```bash
-make docker-build   # イメージの構築
-make docker-shell   # コンテナ内の開発シェルに入る (カレントディレクトリをマウント)
-make docker-check   # コンテナ内でのスモークテスト
+make docker-build                                      # default profile
+make docker-shell TOOLCHAIN_PROFILE=software           # software profile
+make docker-check TOOLCHAIN_PROFILE=hdl                # hdl profile のスモークテスト
 ```
 
 直接実行する場合:
 
 ```bash
 docker build -t dotfiles-dev .
+docker build --build-arg DOTFILES_TOOLCHAIN_PROFILE=browser -t dotfiles-browser .
 docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
 docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```

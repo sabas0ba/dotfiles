@@ -7,7 +7,7 @@
 ```
 flake.nix                入力 (rev 固定) と出力の定義
 flake.lock               入力の解決結果
-nix/packages.nix         ツールの一覧 (単一情報源)
+nix/packages.nix         ツール、コマンド契約、用途別 profile (単一情報源)
 nix/devshell.nix         開発シェルの定義
 nix/checks.nix           nix flake check が実行する検査
 nix/home.nix             home-manager によるホームディレクトリの構成
@@ -40,13 +40,23 @@ CLAUDE.md                Claude Code 向けの補足
 
 ## ツールを追加する
 
-1. `nix/packages.nix` にパッケージ名を追記する (グループのコメントに従って配置する)
-2. コマンドとして使うものは `scripts/check-env.sh` の `required_commands` にも追記する
-3. `make check` が成功することを確認する
+1. `nix/packages.nix` の用途別 group に `mkTool` を追記する
+2. package が提供する必須コマンドを同じ `mkTool` の `commands` に記述する
+3. 必要な profile の `groups` に追加する
+4. `make check` が成功することを確認する
+
+`scripts/check-env.sh` にコマンド名を追記しない。profile ごとのコマンド契約は `nix/packages.nix` から manifest として生成される。Linux 固有の package には `systems = linuxSystems;` を指定し、4 platform の flake 評価を壊さないようにする。package 自体の `meta.platforms` も `lib.meta.availableOn` で検査される。
+
+容量の大きい tool を `base` に追加しない。通常の dotfiles 保守で必要なものだけを `default` に置き、言語、コンテナ、HDL、browser は用途別 profile へ置く。profile 名は `devShells` と `packages` で共通であり、次の両方を確認する。
+
+```bash
+nix develop .#software
+nix build --no-link .#software
+```
 
 `Dockerfile` にツール名を追記しない。定義が重複し、不整合が生じる。
 
-開発シェルの stdenv が暗黙に載せるコマンド (`awk` 等) に依存しない。`nix build .#default` の profile (Docker イメージが使う環境) には含まれないため、そこで壊れる。
+開発シェルの stdenv が暗黙に載せるコマンド (`awk` 等) に依存しない。`nix build .#software` 等の通常の profile には含まれないため、そこで壊れる。
 
 ## ホームディレクトリの構成を変更する
 
@@ -54,7 +64,7 @@ CLAUDE.md                Claude Code 向けの補足
 
 ## Dockerfile を変更する
 
-コンテナはホストと同一の環境である必要がある。イメージの内容を変更する場合、変更先は `nix/packages.nix` である。`Dockerfile` を直接変更してよいのは、レイヤ構成、ベースイメージの固定、entrypoint の挙動を変更する場合に限る。
+コンテナは同名のホスト profile と同一の環境である必要がある。イメージの内容を変更する場合、変更先は `nix/packages.nix` である。`Dockerfile` を直接変更してよいのは、レイヤ構成、ベースイメージの固定、profile 選択の受け渡し、entrypoint の挙動を変更する場合に限る。
 
 ## 固定を更新する
 

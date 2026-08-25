@@ -4,7 +4,7 @@
 #
 # 検査するのは次の 2 点である。
 #
-#   1. nix/packages.nix のツールがコマンドとして揃っていること
+#   1. 選択した profile のコマンド契約が揃っていること
 #   2. その実体が Nix の store にあること
 #
 # 1 だけではホストに元から入っているツールを拾ってしまうため、2 を併せて見る。
@@ -21,25 +21,39 @@
 #   使用方法: scripts/check-env.sh
 set -euo pipefail
 
-# nix/packages.nix に含まれるツールのうち、コマンドとして使用するもの。
-# 本リストを変更した場合は nix/packages.nix 側にも同じものを追加する。
-required_commands=(
-  bash
-  deadnix
-  direnv
-  fd
-  git
-  jq
-  make
-  nil
-  nixfmt
-  rg
-  shellcheck
-  shfmt
-  statix
-  tree
-  yq
-)
+# コマンド契約は nix/packages.nix から生成する。開発シェルでは manifest のパスを
+# 環境変数で受け取り、nix build の profile や Cloud Setup の配置では profile に含む
+# metadata command から取得する。
+required_commands=()
+if [ -n "${DOTFILES_COMMAND_MANIFEST:-}" ]; then
+  if [ ! -r "$DOTFILES_COMMAND_MANIFEST" ]; then
+    echo "コマンド契約を読めません: $DOTFILES_COMMAND_MANIFEST" >&2
+    exit 1
+  fi
+
+  mapfile -t required_commands <"$DOTFILES_COMMAND_MANIFEST"
+elif command -v dotfiles-toolchain-info >/dev/null 2>&1; then
+  mapfile -t required_commands < <(dotfiles-toolchain-info commands)
+else
+  echo "コマンド契約が見つかりません。nix develop .#default 等で実行してください。" >&2
+  exit 1
+fi
+
+validated_commands=()
+for cmd in "${required_commands[@]}"; do
+  [ -n "$cmd" ] || continue
+  if [[ ! "$cmd" =~ ^[a-zA-Z0-9_.+-]+$ ]]; then
+    echo "コマンド契約に不正な名前があります: $cmd" >&2
+    exit 1
+  fi
+  validated_commands+=("$cmd")
+done
+required_commands=("${validated_commands[@]}")
+
+if [ "${#required_commands[@]}" -eq 0 ]; then
+  echo "コマンド契約が空です。" >&2
+  exit 1
+fi
 
 # Nix の store の位置。既定から変えている環境のために NIX_STORE_DIR を見る。
 store_dir=${NIX_STORE_DIR:-/nix/store}
@@ -113,10 +127,16 @@ if [ "${#foreign[@]}" -ne 0 ]; then
 fi
 
 # どの状態で揃っているかを示す。判定には用いない。
+profile_name=${DOTFILES_TOOLCHAIN_PROFILE:-}
+if [ -z "$profile_name" ] && command -v dotfiles-toolchain-info >/dev/null 2>&1; then
+  profile_name=$(dotfiles-toolchain-info name)
+fi
+profile_name=${profile_name:-unknown}
+
 if [ "${DOTFILES_ENV:-}" = nix-develop ]; then
-  state="開発シェル内、DOTFILES_ENV=nix-develop"
+  state="開発シェル内、profile=$profile_name"
 else
-  state="開発シェル外、PATH 上のツールが store を指している"
+  state="開発シェル外、profile=$profile_name、PATH 上のツールが store を指している"
 fi
 
 # WSL 上では Windows 側からの隔離が成立していることも環境の要件とする。
