@@ -364,7 +364,14 @@ install_home() {
   local source target backup
 
   while IFS= read -r source; do
-    target=$HOME/${source#"$repo/home/"}
+    case "$source" in
+      "$repo/home/.codex/"*)
+        # Codex は設定の基点を CODEX_HOME から探索する。Cloud runtime では
+        # HOME/.codex と異なるため、.codex 以下はそちらへ対応させる。
+        target=${CODEX_HOME:-"$HOME/.codex"}/${source#"$repo/home/.codex/"}
+        ;;
+      *) target=$HOME/${source#"$repo/home/"} ;;
+    esac
     backup=$target.dotfiles-backup
     mkdir -p "$(dirname "$target")"
 

@@ -137,7 +137,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 | 開発シェルの実体化 | 行う | 行う |
 | 環境の引き渡し | `$CLAUDE_ENV_FILE` へ書く | 行わない |
 | ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
-| ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く |
+| ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く (`home/.codex/` は `$CODEX_HOME` が設定されていればその直下へ置く) |
 
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 
@@ -161,7 +161,7 @@ git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
 
 版を固定する場合、`--depth 1` を外し、`git -C /opt/dotfiles checkout <40 桁のリビジョン>` を setup script に加える。処理内容、既存ファイルの退避、再現性の例外および到達範囲の制約は、前節の「[他のリポジトリで使う](#他のリポジトリで使う)」と同じである。
 
-セットアップにより `home/.codex/AGENTS.md` が `~/.codex/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
+セットアップにより `home/.codex/AGENTS.md` が `${CODEX_HOME:-$HOME/.codex}/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。Codex のクラウド環境では `CODEX_HOME=/opt/codex` のため、配置先は `/opt/codex/AGENTS.md` となる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
 
 ---
 
