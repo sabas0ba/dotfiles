@@ -80,7 +80,7 @@ direnv allow
 | 項目 | 指定 |
 | --- | --- |
 | Network access | Trusted (既定)。変更しない |
-| Environment variables | 不要 |
+| Environment variables | 不要。`nix/packages.nix` に無いツールを足す場合のみ `DOTFILES_EXTRA_PACKAGES` ([追加のパッケージを指定する](#追加のパッケージを指定する)) |
 | Setup script | 不要 |
 
 Trusted の許可リストには `*.nixos.org` が含まれ、フックが必要とする `releases.nixos.org` (Nix 本体) と `cache.nixos.org` (依存のバイナリ) が共に通る。None ではフックが Nix を取得できず、開発シェルの無いセッションになる。Custom では上記の 2 つを許可する。
@@ -102,6 +102,39 @@ nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 ```
 
 すべての検査 (`make check`) は CI がコンテナ内で行う。イメージは構築時に入力をすべて取り込んでおり、`--network none` で完結する。
+
+### 追加のパッケージを指定する
+
+`nix/packages.nix` に無いツールを、当該セッションに限って足せる。作業対象のリポジトリが必要とする言語のツールチェーン (Python、Go 等) のように、開発環境そのものには入れない依存を想定している。
+
+クラウド環境によっては、セットアップの完了後にネットワークが遮断される (ChatGPT Codex の既定がこれである)。遮断後は取得できないため、セットアップの実行中に store へ入れておく必要がある。指定はここで受ける。
+
+| 経路 | 指定方法 |
+| --- | --- |
+| SessionStart フック | 環境変数 `DOTFILES_EXTRA_PACKAGES` |
+| Setup script | 引数 `--extra-packages`、または環境変数 |
+
+フックのコマンドは `.claude/settings.json` に固定されており引数を渡せないため、環境変数を使う。双方を与えた場合は併合する。
+
+```bash
+DOTFILES_EXTRA_PACKAGES="python3 gcc python3Packages.requests"
+```
+
+```bash
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable \
+  --extra-packages "python3 gcc"
+```
+
+値は [nixpkgs](https://search.nixos.org/packages) の attribute 名を空白区切りで並べたものである。`nixpkgs#python3` のような flakeref ではなく、`python3` のように名前だけを与える。
+
+- nixpkgs のリビジョンは `flake.lock` が固定したものを使う。開発シェルと同一であり、store も共有する。registry の `nixpkgs` (固定されていない) は参照しない
+- 配置先は `/nix/var/nix/profiles/dotfiles-extra` である。開発シェルの profile とは分けてあり、[単一情報源](development.md#ツールを追加する)である `nix/packages.nix` の内容には影響しない
+- PATH では開発シェルのツールより前に置く。名前が重なった場合は追加した側が使われる
+- `scripts/check-env.sh` の検査対象ではない。当該スクリプトが見るのは `nix/packages.nix` のツールのみである
+- 名前の誤りは実体化の時点で失敗する。他の構成は最後まで進めたうえで終了状態を失敗とするため、指定を直して再実行すればよい。誤った 1 つのために他のパッケージまで落とすことはしない
+- バイナリキャッシュに無いものを指定するとソースからの構築となり、時間がかかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない
+
+恒久的に必要なツールはここではなく `nix/packages.nix` に追加する。手順は[ツールを追加する](development.md#ツールを追加する)にある。本節の指定は環境の設定にしか残らず、他の環境 (手元、Docker、CI) には反映されない。
 
 ### 他のリポジトリで使う
 
@@ -138,6 +171,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 | 環境の引き渡し | `$CLAUDE_ENV_FILE` へ書く | 行わない |
 | ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
 | ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く (`home/.codex/` は `$CODEX_HOME` が設定されていればその直下へ置く) |
+| 追加パッケージ | 環境変数で指定する | 引数または環境変数で指定する |
 
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 
@@ -160,6 +194,13 @@ git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
 ```
 
 版を固定する場合、`--depth 1` を外し、`git -C /opt/dotfiles checkout <40 桁のリビジョン>` を setup script に加える。処理内容、既存ファイルの退避、再現性の例外および到達範囲の制約は、前節の「[他のリポジトリで使う](#他のリポジトリで使う)」と同じである。
+
+Codex のクラウド環境は、既定では setup script の完了後にネットワークを遮断する。以降は取得ができないため、作業に必要なツールは setup script の中で揃える。`nix/packages.nix` に無いものは `--extra-packages` で足す ([追加のパッケージを指定する](#追加のパッケージを指定する))。
+
+```bash
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable \
+  --extra-packages "python3 gcc"
+```
 
 セットアップにより `home/.codex/AGENTS.md` が `${CODEX_HOME:-$HOME/.codex}/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。Codex のクラウド環境では `CODEX_HOME=/opt/codex` のため、配置先は `/opt/codex/AGENTS.md` となる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
 
