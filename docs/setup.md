@@ -137,7 +137,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 | 開発シェルの実体化 | 行う | 行う |
 | 環境の引き渡し | `$CLAUDE_ENV_FILE` へ書く | 行わない |
 | ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
-| ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く |
+| ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く (`home/.codex/` は `$CODEX_HOME` が設定されていればその直下へ置く) |
 
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 
@@ -146,6 +146,22 @@ Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは
 - ホームの構成は home-manager を経由しない (前節のとおり取得できないため)。置く内容は同一で、既存のファイルは上書きする。内容が異なるものは初回に `<ファイル名>.dotfiles-backup` へ退避する
 - 本経路では `DOTFILES_ENV` が設定されない。`scripts/check-env.sh` はコマンドの実体が Nix の store にあることで判定するため、開発シェルを経由せずそのまま実行して成功する
 - 初回は数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない
+
+## ChatGPT Codex のクラウド環境
+
+Codex のクラウド環境では、Environment の Setup script に以下を設定する。本リポジトリには Codex 向けの自動実行 hook を置いていないため、本リポジトリを対象にする場合もこの設定を使用する。
+
+```bash
+#!/bin/bash
+set -euo pipefail
+
+git clone --depth 1 https://github.com/sabas0ba/dotfiles /opt/dotfiles
+/opt/dotfiles/scripts/cloud-setup.sh --setup-script --disposable
+```
+
+版を固定する場合、`--depth 1` を外し、`git -C /opt/dotfiles checkout <40 桁のリビジョン>` を setup script に加える。処理内容、既存ファイルの退避、再現性の例外および到達範囲の制約は、前節の「[他のリポジトリで使う](#他のリポジトリで使う)」と同じである。
+
+セットアップにより `home/.codex/AGENTS.md` が `${CODEX_HOME:-$HOME/.codex}/AGENTS.md` に配置され、リポジトリをまたぐ利用者共通の作業指示として Codex に読み込まれる。Codex のクラウド環境では `CODEX_HOME=/opt/codex` のため、配置先は `/opt/codex/AGENTS.md` となる。本リポジトリ内では、ルートの `AGENTS.md` がリポジトリ固有の手順を追加する。
 
 ---
 
