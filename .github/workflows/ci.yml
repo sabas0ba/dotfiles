@@ -31,9 +31,7 @@ jobs:
         # actions/checkout v4.2.2
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
-      - name: イメージを構築する
-        run: docker build -t dotfiles-dev .
-
       - name: コンテナ内で検査を実行する
-        # --network none で実行し、イメージが自己完結していることも同時に検証する。
-        run: docker run --rm --network none dotfiles-dev make check
+        # ローカルと CI の検査経路を同じ Make target に置く。target は現在の checkout
+        # から image を構築し、--network none で make check を実行する。
+        run: make docker-check
