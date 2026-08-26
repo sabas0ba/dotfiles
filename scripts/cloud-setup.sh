@@ -18,12 +18,19 @@
 # いずれもセッションの開始ごとに実行されるため、既に済んでいる処理は飛ばす。失敗した
 # 場合はそのまま再実行できる。
 #
+# nix/packages.nix に無いツールを当該セッションに限って足す手段として、追加パッケージ
+# の指定を受ける (--extra-packages および DOTFILES_EXTRA_PACKAGES)。クラウド環境の中に
+# は、セットアップの完了後にネットワークを遮断するものがある。遮断後は取得できないため、
+# ネットワークが生きている本スクリプトの実行中に store へ入れておく必要がある。
+#
 #   使用方法: scripts/cloud-setup.sh [--setup-script --disposable]
+#             [--extra-packages "<名前> ..."]
 set -euo pipefail
 
 usage() {
   cat <<'USAGE'
 使用方法: scripts/cloud-setup.sh [--setup-script --disposable]
+                                 [--extra-packages "<名前> ..."]
 
 オプション:
   --setup-script  クラウド環境の Setup script から呼ぶ経路。ツールを
@@ -32,6 +39,11 @@ usage() {
   --disposable    実行先が使い捨ての環境であることの明示。--setup-script が
                   行う配置は system と $HOME を書き換えるため、利用者のホストで
                   誤って実行されないよう明示を要求する
+  --extra-packages "<名前> ..."
+                  当該セッションに限って足す nixpkgs のパッケージ。空白区切りの
+                  attribute 名で指定する (例: "python3 gcc")。環境変数
+                  DOTFILES_EXTRA_PACKAGES でも同じ形式で指定でき、双方を与えた
+                  場合は併合する。フックの経路は引数を渡せないため環境変数を使う
 
 引数を与えない場合は SessionStart フックとしての動作となる。この経路は
 CLAUDE_CODE_REMOTE=true の環境でのみ処理を行う。
@@ -41,10 +53,77 @@ USAGE
 mode=hook
 disposable=0
 
+# 追加パッケージの名前。指定順を保つ。
+extra_packages=()
+
+# 実体化できなかった追加パッケージ。最後にまとめて報告する。
+extra_failed=()
+
+# 空白区切りの並びを受け取り、追加パッケージの一覧に足す。
+#
+# 引数と環境変数の双方から同じ名前が与えられることがあるため、重複は取り除く。
+# 同じ名前を 2 度 install しても結果は変わらないが、その分だけ時間がかかり、
+# 出力にも重複が出るためである。
+add_extra_packages() {
+  local list=$1
+  local name
+  local parsed=()
+
+  # 区切りは空白と改行の双方とする。環境変数はクラウド環境の設定画面から複数行で
+  # 与えられることがあり、既定の read では 1 行目しか読まないためである。入力の終端まで
+  # 読む指定 (-d '') は終端で偽を返すため、それ自体は失敗として扱わない。
+  #
+  # 分割に read を用いるのは、$list を展開する方式では glob が働き、`*` のような指定が
+  # ファイル名に化けるためである。
+  read -rd '' -ra parsed <<<"$list" || true
+
+  for name in "${parsed[@]}"; do
+    case " ${extra_packages[*]} " in
+      *" $name "*) continue ;;
+    esac
+    extra_packages+=("$name")
+  done
+}
+
+# nixpkgs の attribute 名として妥当かを見る。
+#
+# 値は引数として nix に渡すため、シェルの解釈による注入は起こらない。ここで弾くのは
+# nix に別の意味で解釈される形である。すなわち、オプションと解釈される先頭の `-` と、
+# flakeref の区切りである `#` を含むものである。後者は `nixpkgs#python3` のように参照を
+# 明示した場合に起こる。いずれも本スクリプトが `nixpkgs#<名前>` を組み立てるため要らない。
+validate_extra_package() {
+  local name=$1
+
+  case "$name" in
+    -*)
+      echo "エラー: 追加パッケージの名前が - で始まっています: $name" >&2
+      return 1
+      ;;
+    *'#'*)
+      echo "エラー: 追加パッケージには flakeref ではなく attribute 名を与えます: $name" >&2
+      echo "       例: 'nixpkgs#python3' ではなく 'python3'" >&2
+      return 1
+      ;;
+    *[!A-Za-z0-9._+-]*)
+      echo "エラー: 追加パッケージの名前に使用できない文字があります: $name" >&2
+      return 1
+      ;;
+  esac
+}
+
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --setup-script) mode=setup-script ;;
     --disposable) disposable=1 ;;
+    --extra-packages)
+      if [ "$#" -lt 2 ]; then
+        echo "エラー: --extra-packages には値が必要です。" >&2
+        exit 1
+      fi
+      add_extra_packages "$2"
+      shift
+      ;;
+    --extra-packages=*) add_extra_packages "${1#*=}" ;;
     -h | --help)
       usage
       exit 0
@@ -58,6 +137,24 @@ while [ "$#" -gt 0 ]; do
   esac
   shift
 done
+
+# フックの経路は引数を渡せない (コマンドが .claude/settings.json に固定されている)。
+# クラウド環境の設定で与えられる環境変数を、引数と同じ形式で受ける。
+add_extra_packages "${DOTFILES_EXTRA_PACKAGES:-}"
+
+# 名前の検査は Nix を導入するより前に済ませる。誤りが分かるのが構成の終盤では、
+# 待ち時間の後にやり直すことになるためである。1 つ目で止めず、すべて報告する。
+extra_invalid=0
+for package in "${extra_packages[@]}"; do
+  validate_extra_package "$package" || extra_invalid=1
+done
+
+if [ "$extra_invalid" -ne 0 ]; then
+  echo >&2
+  echo "追加パッケージは nixpkgs の attribute 名を空白区切りで指定します。" >&2
+  echo "  例: --extra-packages \"python3 gcc ripgrep\"" >&2
+  exit 1
+fi
 
 # フックから呼ばれた場合はリモート実行環境でのみ動作させる。手元の環境は direnv または
 # nix develop で開発シェルに入る (docs/setup.md)。利用者のホストに Nix を導入する経路を
@@ -106,6 +203,14 @@ repo=$(cd "$script_dir/.." && pwd)
 
 # 実体化した開発シェルの配置先。Dockerfile が使う名前と揃える。
 readonly DOTFILES_PROFILE=/nix/var/nix/profiles/dotfiles-dev
+
+# 追加パッケージの配置先。開発シェルの profile とは分ける。
+#
+# nix/packages.nix は開発シェル、`nix build` の profile、Docker イメージの単一情報源で
+# あり、その内容はリポジトリのすべての環境で同一である。追加パッケージは当該セッション
+# に限るものであるため、そこへ混ぜず別の profile に置く。どちらの経路で入ったツールかが
+# 実行時にも区別できる。
+readonly DOTFILES_EXTRA_PROFILE=/nix/var/nix/profiles/dotfiles-extra
 
 # 当該環境は USER を設定しない。Nix の profile スクリプトは HOME と USER の両方が
 # ある場合にしか PATH を設定せず、home-manager の activation script も USER を参照する
@@ -231,6 +336,58 @@ build_dev_shell() {
   fi
 }
 
+# --- 追加パッケージ ----------------------------------------------------------
+
+# 指定された nixpkgs のパッケージを store へ入れ、profile に載せる。
+#
+# nixpkgs は `--inputs-from` で本リポジトリの flake の入力を参照する。registry の
+# `nixpkgs` をそのまま使うと固定されていないリビジョンを引き、開発シェルと異なる
+# nixpkgs から取ることになる。入力は flake.lock で固定されており、開発シェルと同一の
+# リビジョンから解決される (store も共有される)。
+#
+# 1 つずつ install する。まとめて渡すと 1 つの誤りで全体が失敗し、正しく指定された分も
+# 入らない。ネットワークが遮断される環境では後から入れ直せないため、入るものは入れる。
+#
+# 既に入っているパッケージは nix が警告して成功するため、再実行はそのまま通る。
+install_extra_packages() {
+  local name
+  local removed
+
+  # 入れ直す前に、profile の中身を落とす。当該環境のコンテナはセッションをまたいで
+  # 保存されるため、profile も残る。指定から外したパッケージがそのまま残ると、開発
+  # シェルのコマンドを覆い続け、しかも指定を見ても分からない状態になる。毎回作り直す
+  # ことで、その時点の指定が profile の内容と一致する。
+  #
+  # 出力は落としたパッケージの列挙であり、直後に入れ直すため紛らわしい。成功した場合
+  # は伏せ、失敗した場合にのみ示す。profile がまだ無い場合は何もせずに成功する。
+  if ! removed=$(nix profile remove --all --profile "$DOTFILES_EXTRA_PROFILE" 2>&1); then
+    echo "エラー: 追加パッケージの profile を初期化できませんでした。" >&2
+    printf '%s\n' "$removed" >&2
+    exit 1
+  fi
+
+  if [ "${#extra_packages[@]}" -eq 0 ]; then
+    note "指定が無いため、以前に入れた追加パッケージを取り除いた"
+    return
+  fi
+
+  for name in "${extra_packages[@]}"; do
+    if nix profile install \
+      --inputs-from "$repo" \
+      --profile "$DOTFILES_EXTRA_PROFILE" \
+      "nixpkgs#$name"; then
+      note "実体化した: $name"
+    else
+      note "実体化できなかった: $name"
+      extra_failed+=("$name")
+    fi
+  done
+
+  if [ "${#extra_failed[@]}" -eq 0 ]; then
+    note "追加パッケージを profile に置いた ($DOTFILES_EXTRA_PROFILE)"
+  fi
+}
+
 # セッションのシェルに開発シェルの環境を引き渡す。
 #
 # 値は開発シェルから取り出したものをそのまま使う。ここで PATH 等を組み立て直すと
@@ -244,15 +401,27 @@ write_env_file() {
     return
   fi
 
+  # 追加パッケージは開発シェルの外にあるため、その bin を PATH の先頭に足す。
+  # 先頭に置くのは、後ろでは system の同名のコマンドに負けるためである
+  # (開発シェルから取り出した PATH は既に system の分を含む)。
+  local extra_bin=
+  if [ -d "$DOTFILES_EXTRA_PROFILE/bin" ]; then
+    extra_bin=$DOTFILES_EXTRA_PROFILE/bin
+  fi
+
   local exported
   # 展開は開発シェルの内側で行う。ここで展開してしまうと外側の値になる。
   # shellcheck disable=SC2016
   exported=$(
     nix develop "$DOTFILES_PROFILE" --command bash -c '
+      if [ -n "$1" ]; then
+        PATH=$1:$PATH
+      fi
+
       for name in PATH USER DOTFILES_ENV DOTFILES_ROOT LC_ALL; do
         printf "export %s=%q\n" "$name" "${!name}"
       done
-    ' | grep '^export ' || true
+    ' bash "$extra_bin" | grep '^export ' || true
   )
 
   if [ -z "$exported" ]; then
@@ -297,7 +466,7 @@ show_revision() {
 # 実際に覆ったものを実行時にも示す。
 install_toolchain() {
   local profile=/nix/var/nix/profiles/dotfiles-toolchain
-  local source target name existing
+  local dir source target name existing stale
   local count=0
   local shadowed=()
 
@@ -308,6 +477,13 @@ install_toolchain() {
     note "ツールを profile として実体化した ($profile)"
   fi
 
+  # profile が空でないことを、配置する前に確かめる。配置の総数で見ると、nix 自身や
+  # 追加パッケージの分で 0 にならず、ツールが入っていないことを見落とす。
+  if ! compgen -G "$profile/bin/*" >/dev/null; then
+    echo "エラー: $profile/bin にコマンドがありません。" >&2
+    exit 1
+  fi
+
   mkdir -p /usr/local/bin
 
   # nix 自身も対象に含める。他のリポジトリのセッションでも nix develop や nix shell を
@@ -315,31 +491,56 @@ install_toolchain() {
   local nix_bin
   nix_bin=$(dirname "$(command -v nix)")
 
-  for source in "$profile"/bin/* "$nix_bin"/*; do
-    # 対象が無い場合、glob は展開されずそのまま残る。
-    [ -e "$source" ] || continue
+  # 追加パッケージは最後に置く。同名がある場合は後から張った symlink が残るため、
+  # フックの経路で PATH の先頭に足すのと同じ優先順位になる。
+  local dirs=("$profile/bin" "$nix_bin" "$DOTFILES_EXTRA_PROFILE/bin")
 
-    name=$(basename "$source")
-    target=/usr/local/bin/$name
+  for dir in "${dirs[@]}"; do
+    for source in "$dir"/*; do
+      # 対象が無い場合、glob は展開されずそのまま残る。
+      [ -e "$source" ] || continue
 
-    # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
-    # symlink (/usr/local/bin) と Nix の実体は対象から除く。
-    existing=$(command -v "$name" 2>/dev/null || true)
-    case "$existing" in
-      "" | /usr/local/bin/* | /nix/*) ;;
-      *) shadowed+=("$name") ;;
-    esac
+      name=$(basename "$source")
+      target=/usr/local/bin/$name
 
-    ln -sfn "$source" "$target"
-    count=$((count + 1))
+      # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
+      # symlink (/usr/local/bin) と Nix の実体は対象から除く。
+      existing=$(command -v "$name" 2>/dev/null || true)
+      case "$existing" in
+        "" | /usr/local/bin/* | /nix/*) ;;
+        *) shadowed+=("$name") ;;
+      esac
+
+      ln -sfn "$source" "$target"
+      count=$((count + 1))
+    done
   done
 
-  if [ "$count" -eq 0 ]; then
-    echo "エラー: $profile/bin にコマンドがありません。" >&2
-    exit 1
-  fi
+  # 追加パッケージを指定から外すと、前回張った symlink の指す先が profile から消える。
+  # 壊れた symlink が残ると command -v では見つかるのに実行が失敗するため、追加パッケージ
+  # の profile を指していて実体を失ったものを取り除く。配置の後に行う。この時点で
+  # 実体を持たないものが、指定から外れたものである。
+  stale=0
+  for target in /usr/local/bin/*; do
+    # symlink であり、かつ指す先を失っているものだけを対象とする。実体のあるファイルと、
+    # 解決できている symlink は残す。
+    if [ ! -L "$target" ] || [ -e "$target" ]; then
+      continue
+    fi
+
+    case "$(readlink "$target")" in
+      "$DOTFILES_EXTRA_PROFILE"/*)
+        rm -f "$target"
+        stale=$((stale + 1))
+        ;;
+    esac
+  done
 
   note "/usr/local/bin へ配置した ($count 件)"
+
+  if [ "$stale" -ne 0 ]; then
+    note "指定から外れた追加パッケージの symlink を取り除いた ($stale 件)"
+  fi
 
   if [ "${#shadowed[@]}" -ne 0 ]; then
     note "system の同名のコマンドを覆った (${#shadowed[@]} 件): ${shadowed[*]}"
@@ -398,6 +599,16 @@ load_nix
 step "開発シェルを構築する"
 build_dev_shell
 
+# 追加パッケージは開発シェルより後、配置より前に置く。前者は nixpkgs の解決に
+# flake の入力を使うため、後者は配置の対象に含めるためである。
+#
+# 指定が無くても、以前のセッションが残した profile があれば処理する。取り除く対象が
+# あるためである。いずれも無い場合だけ何もしない。
+if [ "${#extra_packages[@]}" -ne 0 ] || [ -e "$DOTFILES_EXTRA_PROFILE" ]; then
+  step "追加パッケージを構成する"
+  install_extra_packages
+fi
+
 if [ "$mode" = hook ]; then
   step "セッションに環境を引き渡す"
   write_env_file
@@ -411,5 +622,17 @@ fi
 
 step "環境を検査する"
 nix develop "$DOTFILES_PROFILE" --command "$repo/scripts/check-env.sh"
+
+# 追加パッケージの失敗は、構成を最後まで進めてから報告する。ここで途中で止めると、
+# 名前を 1 つ誤っただけで開発シェルの引き渡しごと失われ、セッションが構成前の状態に
+# なるためである。指定されたものが揃っていない事実は残すため、終了状態は失敗とする。
+if [ "${#extra_failed[@]}" -ne 0 ]; then
+  step "追加パッケージを実体化できなかった"
+  echo "エラー: 次のパッケージを実体化できませんでした: ${extra_failed[*]}" >&2
+  echo "       名前は nixpkgs の attribute である必要があります" >&2
+  echo "       (https://search.nixos.org/packages で確認できます)。" >&2
+  echo "       他の構成は完了しているため、指定を直して再実行すれば足ります。" >&2
+  exit 1
+fi
 
 step "構成を終えた"
