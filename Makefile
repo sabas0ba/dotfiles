@@ -11,10 +11,17 @@ HM_TARGET ?= $(shell id -un)
 
 .PHONY: help
 help: ## 本ヘルプを表示する
-	@echo "使用方法: make <target>"
-	@echo
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@printf '使用方法: make <target>\n\n'
+	@pattern='^([a-zA-Z0-9_-]+):.*## (.*)$$'; \
+	for makefile in $(MAKEFILE_LIST); do \
+		while IFS= read -r line; do \
+			line=$${line%$$'\r'}; \
+			if [[ $$line =~ $$pattern ]]; then \
+				printf '  \033[36m%-14s\033[0m %s\n' \
+					"$${BASH_REMATCH[1]}" "$${BASH_REMATCH[2]}"; \
+			fi; \
+		done < "$$makefile"; \
+	done
 
 # --- ホスト側の環境 ---------------------------------------------------------
 

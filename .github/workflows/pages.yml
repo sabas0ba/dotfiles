@@ -20,11 +20,10 @@ on:
   # 内容を変えずに再公開したい場合に使う。
   workflow_dispatch:
 
-# Pages への配置に必要な権限のみを与える。
+# workflow 全体では文書の読み取りだけを許可する。Pages への書き込みと OIDC は、
+# main を配置する deploy job にだけ与える。
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # 配置は同時に 1 つとする。実行中のものは打ち切らない。打ち切ると公開されている内容が
 # 中途半端な状態で残りうるため。ref ごとに分けているのは、PR の生成確認が main の
@@ -41,20 +40,6 @@ jobs:
       - name: Checkout
         # actions/checkout v4.2.2
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Pages の設定を取得する
-        # PR では配置しないため取得しない。fork からの PR にはそもそも当該 API を
-        # 呼ぶ権限が無く、実行すると生成の確認自体ができなくなる。
-        if: github.event_name != 'pull_request'
-        # actions/configure-pages v5
-        #
-        # 引数は与えない。static_site_generator と generator_config_file による
-        # baseurl の注入は、当該 action が .js / .cjs / .mjs しか扱えないため
-        # Jekyll の _config.yml には使えない。baseurl は docs/_config.yml に書く。
-        #
-        # 本手順を残しているのは、Pages が有効化されていない場合にここで明確に
-        # 失敗させるためである。
-        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
 
       - name: サイトを生成する
         # actions/jekyll-build-pages v1
@@ -74,10 +59,24 @@ jobs:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - name: Pages の設定を取得する
+        # actions/configure-pages v5
+        #
+        # 引数は与えない。static_site_generator と generator_config_file による
+        # baseurl の注入は、当該 action が .js / .cjs / .mjs しか扱えないため
+        # Jekyll の _config.yml には使えない。baseurl は docs/_config.yml に書く。
+        #
+        # Pages が有効化されていない場合は、書き込み権限を持つ deploy job で明確に
+        # 失敗させる。PR の build job は Pages API へアクセスしない。
+        uses: actions/configure-pages@983d7736d9b0ae728b81ab479565c72886d7745b
+
       - name: 配置する
         id: deployment
         # actions/deploy-pages v4

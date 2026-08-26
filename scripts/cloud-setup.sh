@@ -198,6 +198,8 @@ repo=$(cd "$script_dir/.." && pwd)
 
 # shellcheck source=scripts/nix-pin.sh
 . "$script_dir/nix-pin.sh"
+# shellcheck source=scripts/pinned-download.sh
+. "$script_dir/pinned-download.sh"
 
 # 実体化した開発シェルの配置先。Dockerfile が使う名前と揃える。
 readonly DOTFILES_PROFILE=/nix/var/nix/profiles/dotfiles-dev
@@ -274,14 +276,10 @@ install_nix() {
   # 作業用のファイルはリポジトリ内の git ignore された場所に置く。
   mkdir -p "$work"
 
-  if [ ! -f "$work/$tarball" ]; then
-    note "取得する: $url"
-    curl -fsSL -o "$work/$tarball" "$url"
-  fi
-
   # 固定した値と照合する。配布元から取得した .sha256 との照合は、配布物と同時に
   # 差し替えられるため検証にならない。docs/setup.md と同じ方針である。
-  printf '%s  %s\n' "$NIX_SHA256" "$work/$tarball" | sha256sum -c -
+  note "Nix の配布物を用意する: $url"
+  pinned_download "$url" "$NIX_SHA256" "$work/$tarball"
 
   tar -xf "$work/$tarball" -C "$work"
 
