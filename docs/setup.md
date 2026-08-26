@@ -70,6 +70,7 @@ direnv allow
 - Nix の導入 — 版と sha256 は `scripts/nix-pin.sh` で定義し、WSL の Ubuntu 経路と共有する。systemd が無いため単一利用者の方式で入れる
 - 開発シェルの実体化 — `nix develop` の結果を profile として置く (`Dockerfile` と同じ処理)
 - 環境の引き渡し — 開発シェルの `PATH` と `DOTFILES_ENV` をセッションに渡す。以降のコマンドは `nix develop` を経由せず開発シェルと同一のツールで動く
+- 構成の記録 — 何を元にどう構成したかを `/var/log/dotfiles/cloud-setup.log` に残す ([構成の記録](#構成の記録))
 
 コンテナの状態は保存されるため、2 回目以降の開始は速い。フックは `CLAUDE_CODE_REMOTE=true` の環境でのみ動作する。
 
@@ -148,6 +149,38 @@ ModuleNotFoundError: No module named 'urllib3'
 
 恒久的に必要なツールはここではなく `nix/packages.nix` に追加する。手順は[ツールを追加する](development.md#ツールを追加する)にある。本節の指定は環境の設定にしか残らず、他の環境 (手元、Docker、CI) には反映されない。
 
+### 構成の記録
+
+`scripts/cloud-setup.sh` は、実行のたびに何を元にどう構成したかを `/var/log/dotfiles/cloud-setup.log` へ追記する。構成の出力はセッションの終了とともに失われ、コンテナも作り直されるため、後から確認する手段が他に無い。
+
+```
+=== 2026-08-26T10:59:57Z 開始
+経路            hook
+引数            (なし)
+dotfiles        fc4cdec... 2026-08-26 Merge pull request #34 from ...
+nix (固定)      2.35.1
+追加パッケージ  hello cowsay
+環境変数
+  CLAUDE_CODE_REMOTE=true
+  CLAUDE_ENV_FILE=/root/.claude/session-env/.../sessionstart-hook-0.sh
+  CODEX_HOME=(未設定)
+  DOTFILES_EXTRA_PACKAGES=hello cowsay
+  HOME=/root
+  USER=root
+--- 2026-08-26T11:00:05Z 終了 (状態 0)
+nix (実行)      nix (Nix) 2.35.1
+nixpkgs         597283ad8aa0b331c788e97c4c262d58877074ef
+追加パッケージ  実体化できなかったもの: (なし)
+```
+
+記録する環境変数は上記の名前に限る。`env` の全体を取って名前のパターン (`*TOKEN*` 等) で濾す方式は採らない。列挙にない名前を取りこぼした時点で秘密が漏れるためである。変数を足す場合は、値が秘密になりえないものに限る。
+
+- 入力は開始時に書き、結果は終了時に書く。終了時にまとめて 1 度で済ませると、途中で異常終了した場合に何も残らず、記録が最も要る場面で失われる
+- 構成が失敗した場合も記録される。終了状態がそのまま残る
+- 引数の誤り、リモート実行環境でない場合、`--disposable` の欠落では記録しない。いずれも何も構成せずに終わるため、記録する対象が無い
+- 記録先に書けない場合は、その旨を出力して構成を続ける。環境が構成できることを、記録が残ることより優先する
+- 記録先はリポジトリの checkout と `$HOME` の双方から独立させてある。前者はセッションごとに作り直され、後者は `--setup-script` が上書きするため、いずれに置いても履歴が残らない
+
 ### 他のリポジトリで使う
 
 本リポジトリ以外の開発で本環境を使う場合は、クラウド環境の Setup script に以下を書く。フックは本リポジトリにしか無いため、環境の側から入れる。
@@ -184,6 +217,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 | ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
 | ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く (`home/.codex/` は `$CODEX_HOME` が設定されていればその直下へ置く) |
 | 追加パッケージ | 環境変数で指定する | 引数または環境変数で指定する |
+| 構成の記録 | 行う | 行う |
 
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 

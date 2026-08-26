@@ -53,6 +53,9 @@ USAGE
 mode=hook
 disposable=0
 
+# 引数は以降の解析で消費するため、記録のために最初に控える。
+argv=("$@")
+
 # 追加パッケージの名前。指定順を保つ。
 extra_packages=()
 
@@ -223,6 +226,122 @@ step() {
 
 note() {
   printf '   %s\n' "$1"
+}
+
+# --- 実行の記録 --------------------------------------------------------------
+
+# 何を元に、いつ、どの指定で環境を構成したかを残す。
+#
+# 構成の出力はセッションの終了とともに失われ、コンテナも作り直されるため、後から
+# 「この環境は何だったのか」を確認する手段が無い。記録があれば、期待と異なる挙動に
+# 出会ったときに、当時の指定まで遡れる。
+#
+# 記録先はリポジトリの checkout と $HOME の双方から独立させる。前者はセッションごとに
+# 作り直され、後者は --setup-script が上書きするため、いずれに置いても履歴が残らない。
+readonly DOTFILES_LOG=/var/log/dotfiles/cloud-setup.log
+
+# 記録する環境変数。
+#
+# 名前を列挙する方式とする。env の全体を取って名前のパターン (*TOKEN* 等) で濾す方式は
+# 採らない。列挙にない名前を取りこぼした時点で秘密が漏れるためである。ここに足すのは、
+# 値が秘密になりえないものに限る。
+readonly LOGGED_ENV=(
+  CLAUDE_CODE_REMOTE
+  CLAUDE_ENV_FILE
+  CODEX_HOME
+  DOTFILES_EXTRA_PACKAGES
+  HOME
+  USER
+)
+
+# 記録が使えるか。書けない場合に構成を止めないための状態である。
+log_disabled=0
+
+timestamp() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# 動かしているリビジョン。取得できない場合もその旨を値とする。
+#
+# --setup-script の経路は本リポジトリを固定せず最新を使う運用を許すため
+# (docs/reproducibility.md)、何を動かしたかは実行時にしか分からない。
+repo_revision() {
+  git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null ||
+    printf '(取得できない: %s は git のリポジトリではない)' "$repo"
+}
+
+# flake.lock が固定している nixpkgs のリビジョン。
+#
+# jq は使わない。フックの経路は開発シェルの外で走るため PATH に無い。nix 自身に JSON を
+# 読ませる。--impure は store の外のファイル (リポジトリ内の flake.lock) を読むために要る。
+# ビルドではなく記録のための読み取りであり、評価結果を何かの入力にはしない。
+#
+# Nix の導入前に呼ばれた場合は取得できない。終了時の記録でのみ使う。
+nixpkgs_revision() {
+  nix eval --raw --impure \
+    --expr "(builtins.fromJSON (builtins.readFile \"$repo/flake.lock\")).nodes.nixpkgs.locked.rev" \
+    2>/dev/null || printf '(取得できない)'
+}
+
+log_line() {
+  if [ "$log_disabled" -eq 0 ]; then
+    printf '%s\n' "$1" >>"$DOTFILES_LOG"
+  fi
+}
+
+# 記録を開始し、入力を残す。
+#
+# 入力は開始時に書く。終了時にまとめて 1 度で済ませると、途中で異常終了した場合に何も
+# 残らず、記録が最も要る場面で失われるためである。
+#
+# 書けない場合 (権限が無い等) は記録を諦めて構成を続ける。環境が構成できることを、記録が
+# 残ることより優先する。
+log_start() {
+  local name value
+
+  if ! mkdir -p "$(dirname "$DOTFILES_LOG")" 2>/dev/null ||
+    ! touch "$DOTFILES_LOG" 2>/dev/null; then
+    log_disabled=1
+    note "記録を残せない (書き込めない): $DOTFILES_LOG"
+    return
+  fi
+
+  log_line ""
+  log_line "=== $(timestamp) 開始"
+  log_line "経路            $mode"
+  log_line "引数            ${argv[*]:-(なし)}"
+  log_line "dotfiles        $(repo_revision)"
+  log_line "nix (固定)      $NIX_VERSION"
+  log_line "追加パッケージ  ${extra_packages[*]:-(なし)}"
+  log_line "環境変数"
+
+  for name in "${LOGGED_ENV[@]}"; do
+    if [ -n "${!name+set}" ]; then
+      value=${!name}
+    else
+      value="(未設定)"
+    fi
+    log_line "  $name=$value"
+  done
+
+  note "記録先: $DOTFILES_LOG"
+}
+
+# 結果を残す。EXIT の trap から呼ぶため、構成が途中で失敗した場合も記録される。
+#
+# 記録が使えない場合はここで返す。以降の値の取得 (nix の版、nixpkgs のリビジョン) は
+# 捨てる先しかなく、nix の評価の分だけ終了が遅くなるためである。
+log_finish() {
+  local status=$?
+
+  if [ "$log_disabled" -ne 0 ]; then
+    return
+  fi
+
+  log_line "--- $(timestamp) 終了 (状態 $status)"
+  log_line "nix (実行)      $(nix --version 2>/dev/null || printf '(取得できない)')"
+  log_line "nixpkgs         $(nixpkgs_revision)"
+  log_line "追加パッケージ  実体化できなかったもの: ${extra_failed[*]:-(なし)}"
 }
 
 # --- Nix の導入 --------------------------------------------------------------
@@ -439,15 +558,9 @@ write_env_file() {
 #
 # この経路は本リポジトリを固定せず、最新を使う運用を許す (docs/reproducibility.md)。
 # 固定しない以上、何を動かしているかは実行時にしか分からない。戻す判断ができるよう、
-# 実際に使ったリビジョンを出力する。
+# 実際に使ったリビジョンを出力する。記録にも同じ値を残す。
 show_revision() {
-  local revision
-
-  if revision=$(git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null); then
-    note "$revision"
-  else
-    note "リビジョンを取得できない ($repo は git のリポジトリではない)"
-  fi
+  note "$(repo_revision)"
 }
 
 # ツールをセッションの PATH に載せる。
@@ -585,6 +698,12 @@ install_home() {
 }
 
 # --- 実行 --------------------------------------------------------------------
+
+# 記録はここから始める。これより前の経路 (引数の誤り、リモート実行環境でない、
+# --disposable の欠落) は何も構成せずに終わるため、記録する対象が無い。
+step "実行を記録する"
+log_start
+trap log_finish EXIT
 
 if [ "$mode" = setup-script ]; then
   step "使用する dotfiles のリビジョン"
