@@ -265,9 +265,27 @@ timestamp() {
 #
 # --setup-script の経路は本リポジトリを固定せず最新を使う運用を許すため
 # (docs/reproducibility.md)、何を動かしたかは実行時にしか分からない。
+#
+# 未コミットの変更がある場合はその旨を併記する。開発シェルの評価対象は HEAD ではなく
+# 作業ツリーであり (nix 自身も当該リビジョンを -dirty として扱う)、リビジョンだけでは
+# 別の内容の環境が同じ記録になる。記録の目的からするとこれは致命的である。
+#
+# 未追跡のファイルは対象に含めない。flake の評価は git の管理下にあるものだけを見るため、
+# 未追跡のファイルは環境の内容を変えない。--untracked-files=no が nix の判定と一致する。
 repo_revision() {
-  git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null ||
+  local revision
+
+  if ! revision=$(git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null); then
     printf '(取得できない: %s は git のリポジトリではない)' "$repo"
+    return
+  fi
+
+  if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    printf '%s (未コミットの変更あり)' "$revision"
+    return
+  fi
+
+  printf '%s' "$revision"
 }
 
 # flake.lock が固定している nixpkgs のリビジョン。
