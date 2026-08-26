@@ -117,7 +117,7 @@ nix build --no-link .#checks.x86_64-linux.pins   # 個別の検査
 フックのコマンドは `.claude/settings.json` に固定されており引数を渡せないため、環境変数を使う。双方を与えた場合は併合する。
 
 ```bash
-DOTFILES_EXTRA_PACKAGES="python3 gcc python3Packages.requests"
+DOTFILES_EXTRA_PACKAGES="python3 gcc ripgrep"
 ```
 
 ```bash
@@ -130,9 +130,21 @@ DOTFILES_EXTRA_PACKAGES="python3 gcc python3Packages.requests"
 - nixpkgs のリビジョンは `flake.lock` が固定したものを使う。開発シェルと同一であり、store も共有する。registry の `nixpkgs` (固定されていない) は参照しない
 - 配置先は `/nix/var/nix/profiles/dotfiles-extra` である。開発シェルの profile とは分けてあり、[単一情報源](development.md#ツールを追加する)である `nix/packages.nix` の内容には影響しない
 - PATH では開発シェルのツールより前に置く。名前が重なった場合は追加した側が使われる
+- profile は毎回、その時点の指定から作り直す。コンテナはセッションをまたいで保存されるため、指定から外したパッケージが残り続けると、開発シェルのコマンドを覆ったまま指定からは分からない状態になる。指定を外せば次のセッションで消える
 - `scripts/check-env.sh` の検査対象ではない。当該スクリプトが見るのは `nix/packages.nix` のツールのみである
 - 名前の誤りは実体化の時点で失敗する。他の構成は最後まで進めたうえで終了状態を失敗とするため、指定を直して再実行すればよい。誤った 1 つのために他のパッケージまで落とすことはしない
 - バイナリキャッシュに無いものを指定するとソースからの構築となり、時間がかかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない
+
+対象はコマンドを提供するパッケージである。言語のライブラリ (`python3Packages.requests` 等) は指定しても動かない。profile に入るのは指定したパッケージ自身だけで、それが伝播する依存は揃わないため、`import` の時点で失敗する。
+
+```
+>>> import requests
+  File ".../site-packages/requests/__init__.py", line 43, in <module>
+    import urllib3
+ModuleNotFoundError: No module named 'urllib3'
+```
+
+ライブラリを含む環境は `python3.withPackages` のような合成を要し、attribute 名の列挙では表せない。必要な場合は `nix/packages.nix` に式として書く。
 
 恒久的に必要なツールはここではなく `nix/packages.nix` に追加する。手順は[ツールを追加する](development.md#ツールを追加する)にある。本節の指定は環境の設定にしか残らず、他の環境 (手元、Docker、CI) には反映されない。
 
@@ -176,7 +188,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは `/etc/profile` を読まないため、環境変数では渡せない。既に PATH にある `/usr/local/bin` へ、`nix build .#default` の profile (中身は `nix/packages.nix`) と `nix` 自身を置く。
 
 - system の同名のコマンド (`git`、coreutils 等) は Nix 版に置き換わる。覆ったものは実行時に列挙する
-- 言語のツールチェーン (Node、Python 等) は含まない。クラウド環境が持つものを使う
+- 言語のツールチェーン (Node、Python 等) は含まない。クラウド環境が持つものを使うか、[追加のパッケージ](#追加のパッケージを指定する)として指定する
 - ホームの構成は home-manager を経由しない (前節のとおり取得できないため)。置く内容は同一で、既存のファイルは上書きする。内容が異なるものは初回に `<ファイル名>.dotfiles-backup` へ退避する
 - 本経路では `DOTFILES_ENV` が設定されない。`scripts/check-env.sh` はコマンドの実体が Nix の store にあることで判定するため、開発シェルを経由せずそのまま実行して成功する
 - 初回は数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない

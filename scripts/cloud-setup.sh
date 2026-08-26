@@ -152,7 +152,7 @@ done
 if [ "$extra_invalid" -ne 0 ]; then
   echo >&2
   echo "追加パッケージは nixpkgs の attribute 名を空白区切りで指定します。" >&2
-  echo "  例: --extra-packages \"python3 gcc python3Packages.requests\"" >&2
+  echo "  例: --extra-packages \"python3 gcc ripgrep\"" >&2
   exit 1
 fi
 
@@ -353,6 +353,25 @@ build_dev_shell() {
 # 既に入っているパッケージは nix が警告して成功するため、再実行はそのまま通る。
 install_extra_packages() {
   local name
+  local removed
+
+  # 入れ直す前に、profile の中身を落とす。当該環境のコンテナはセッションをまたいで
+  # 保存されるため、profile も残る。指定から外したパッケージがそのまま残ると、開発
+  # シェルのコマンドを覆い続け、しかも指定を見ても分からない状態になる。毎回作り直す
+  # ことで、その時点の指定が profile の内容と一致する。
+  #
+  # 出力は落としたパッケージの列挙であり、直後に入れ直すため紛らわしい。成功した場合
+  # は伏せ、失敗した場合にのみ示す。profile がまだ無い場合は何もせずに成功する。
+  if ! removed=$(nix profile remove --all --profile "$DOTFILES_EXTRA_PROFILE" 2>&1); then
+    echo "エラー: 追加パッケージの profile を初期化できませんでした。" >&2
+    printf '%s\n' "$removed" >&2
+    exit 1
+  fi
+
+  if [ "${#extra_packages[@]}" -eq 0 ]; then
+    note "指定が無いため、以前に入れた追加パッケージを取り除いた"
+    return
+  fi
 
   for name in "${extra_packages[@]}"; do
     if nix profile install \
@@ -449,7 +468,7 @@ show_revision() {
 # 実際に覆ったものを実行時にも示す。
 install_toolchain() {
   local profile=/nix/var/nix/profiles/dotfiles-toolchain
-  local dir source target name existing
+  local dir source target name existing stale
   local count=0
   local shadowed=()
 
@@ -499,7 +518,31 @@ install_toolchain() {
     done
   done
 
+  # 追加パッケージを指定から外すと、前回張った symlink の指す先が profile から消える。
+  # 壊れた symlink が残ると command -v では見つかるのに実行が失敗するため、追加パッケージ
+  # の profile を指していて実体を失ったものを取り除く。配置の後に行う。この時点で
+  # 実体を持たないものが、指定から外れたものである。
+  stale=0
+  for target in /usr/local/bin/*; do
+    # symlink であり、かつ指す先を失っているものだけを対象とする。実体のあるファイルと、
+    # 解決できている symlink は残す。
+    if [ ! -L "$target" ] || [ -e "$target" ]; then
+      continue
+    fi
+
+    case "$(readlink "$target")" in
+      "$DOTFILES_EXTRA_PROFILE"/*)
+        rm -f "$target"
+        stale=$((stale + 1))
+        ;;
+    esac
+  done
+
   note "/usr/local/bin へ配置した ($count 件)"
+
+  if [ "$stale" -ne 0 ]; then
+    note "指定から外れた追加パッケージの symlink を取り除いた ($stale 件)"
+  fi
 
   if [ "${#shadowed[@]}" -ne 0 ]; then
     note "system の同名のコマンドを覆った (${#shadowed[@]} 件): ${shadowed[*]}"
@@ -560,8 +603,11 @@ build_dev_shell
 
 # 追加パッケージは開発シェルより後、配置より前に置く。前者は nixpkgs の解決に
 # flake の入力を使うため、後者は配置の対象に含めるためである。
-if [ "${#extra_packages[@]}" -ne 0 ]; then
-  step "追加パッケージを実体化する"
+#
+# 指定が無くても、以前のセッションが残した profile があれば処理する。取り除く対象が
+# あるためである。いずれも無い場合だけ何もしない。
+if [ "${#extra_packages[@]}" -ne 0 ] || [ -e "$DOTFILES_EXTRA_PROFILE" ]; then
+  step "追加パッケージを構成する"
   install_extra_packages
 fi
 
