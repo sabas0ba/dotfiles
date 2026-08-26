@@ -283,9 +283,25 @@ nixpkgs_revision() {
     2>/dev/null || printf '(取得できない)'
 }
 
+# 記録に 1 行足す。
+#
+# 追記の失敗で構成を止めない。開始時に touch が通っても、以降の書き込みは失敗しうる
+# (領域の不足、装置のエラー、書き込み権限の無い既存ファイル)。保護しない追記は set -e の
+# 下でそのままスクリプトを終わらせ、log_start の時点では EXIT の trap すら未設置であるため
+# 構成が丸ごと落ちる。log_finish で起きた場合は、成功した構成の終了状態を 1 に変えてしまう。
+#
+# 一度書けなくなったら以降は諦める。同じ失敗を行ごとに繰り返しても得るものが無い。
+#
+# 2>/dev/null は追記より前に置く。リダイレクトは左から処理されるため、後ろに置くと
+# 追記の失敗を報せるシェルの出力が抑止されない。
 log_line() {
-  if [ "$log_disabled" -eq 0 ]; then
-    printf '%s\n' "$1" >>"$DOTFILES_LOG"
+  if [ "$log_disabled" -ne 0 ]; then
+    return
+  fi
+
+  if ! printf '%s\n' "$1" 2>/dev/null >>"$DOTFILES_LOG"; then
+    log_disabled=1
+    note "記録を書けなくなったため以降は残さない ($DOTFILES_LOG)"
   fi
 }
 
@@ -324,7 +340,10 @@ log_start() {
     log_line "  $name=$value"
   done
 
-  note "記録先: $DOTFILES_LOG"
+  # 上の書き出しの途中で記録が使えなくなった場合は、その旨が既に出ている。
+  if [ "$log_disabled" -eq 0 ]; then
+    note "記録先: $DOTFILES_LOG"
+  fi
 }
 
 # 結果を残す。EXIT の trap から呼ぶため、構成が途中で失敗した場合も記録される。
