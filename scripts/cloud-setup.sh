@@ -257,8 +257,42 @@ readonly LOGGED_ENV=(
 # 記録が使えるか。書けない場合に構成を止めないための状態である。
 log_disabled=0
 
+# --setup-script が配置したツールの由来。install_toolchain が設定する。
+toolchain_origin=
+
 timestamp() {
   date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# 記録に載せる値を 1 行に収める。
+#
+# 改行を含む値をそのまま書くと、続きが名前の前置きを持たない行として記録に混ざり、
+# 行の構造が壊れる。DOTFILES_EXTRA_PACKAGES は複数行での指定を受け付けるため、これは
+# 実際に起こる。値の中の === や --- が記録の区切りに見える形にもなる。
+#
+# printf %q は制御文字を字面に変える。write_env_file が環境を引き渡す際に使っているのと
+# 同じ方式であり、空白を含む値も 1 つの値として読める形になる。
+log_value() {
+  printf '%q' "$1"
+}
+
+# 引数を 1 行に収める。
+#
+# 要素ごとに引用する。空白で連結すると、空白を含む 1 つの引数
+# (--extra-packages "python3 gcc") と 2 つの引数を区別できない。
+log_argv() {
+  local arg joined=
+
+  if [ "${#argv[@]}" -eq 0 ]; then
+    printf '(なし)'
+    return
+  fi
+
+  for arg in "${argv[@]}"; do
+    joined+=" $(log_value "$arg")"
+  done
+
+  printf '%s' "${joined# }"
 }
 
 # 動かしているリビジョン。取得できない場合もその旨を値とする。
@@ -343,15 +377,16 @@ log_start() {
   log_line ""
   log_line "=== $(timestamp) 開始"
   log_line "経路            $mode"
-  log_line "引数            ${argv[*]:-(なし)}"
+  log_line "引数            $(log_argv)"
   log_line "dotfiles        $(repo_revision)"
   log_line "nix (固定)      $NIX_VERSION"
   log_line "追加パッケージ  ${extra_packages[*]:-(なし)}"
   log_line "環境変数"
 
+  # 未設定であることは値ではないため、引用の対象にしない。
   for name in "${LOGGED_ENV[@]}"; do
     if [ -n "${!name+set}" ]; then
-      value=${!name}
+      value=$(log_value "${!name}")
     else
       value="(未設定)"
     fi
@@ -379,6 +414,11 @@ log_finish() {
   log_line "nix (実行)      $(nix --version 2>/dev/null || printf '(取得できない)')"
   log_line "nixpkgs         $(nixpkgs_revision)"
   log_line "追加パッケージ  実体化できなかったもの: ${extra_failed[*]:-(なし)}"
+
+  # フックの経路では配置を行わないため、値を持たない。
+  if [ -n "$toolchain_origin" ]; then
+    log_line "ツール          $toolchain_origin"
+  fi
 }
 
 # --- Nix の導入 --------------------------------------------------------------
@@ -620,11 +660,17 @@ install_toolchain() {
   local count=0
   local shadowed=()
 
+  # 既にある profile は作り直さない。ただし checkout が入れ替わっていた場合、配置する
+  # ツールは以前のリビジョンのものであり、記録の dotfiles の行とは一致しない。どちらで
+  # あったかと、実体がどの store のパスかを記録に残す。store のパスは内容を一意に定める
+  # ため、2 つの実行が同じツールを配置したかどうかはこれで判別できる。
   if [ -e "$profile" ]; then
     note "ツールの profile は既にある ($profile)"
+    toolchain_origin="再利用 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
   else
     nix profile install --profile "$profile" "$repo#default"
     note "ツールを profile として実体化した ($profile)"
+    toolchain_origin="実体化 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
   fi
 
   # profile が空でないことを、配置する前に確かめる。配置の総数で見ると、nix 自身や
