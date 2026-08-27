@@ -683,9 +683,33 @@ install_toolchain() {
   mkdir -p /usr/local/bin
 
   # nix 自身も対象に含める。他のリポジトリのセッションでも nix develop や nix shell を
-  # 使えるようにするため。導入方式によって置き場所が異なるため、解決済みの nix から辿る。
-  local nix_bin
-  nix_bin=$(dirname "$(command -v nix)")
+  # 使えるようにするため。
+  #
+  # 置き場所を PATH から解決してはならない。本経路は 2 回目以降、自分が置いた
+  # /usr/local/bin/nix を先に見つける。その dirname は配置先と同じ /usr/local/bin になり、
+  # 結果として /usr/local/bin のすべてを自分自身へ張り直す。ln が「same file」で止まるまでに
+  # 置き換えられた分は自己参照の symlink となって壊れ、profile に無いもの (当該環境が元から
+  # 持つツール) は元の指し先を失う。本経路はセッションの開始ごとに走るため実際に到達する。
+  #
+  # Nix の導入先から辿る。候補は load_nix が profile スクリプトを探すのと同じ 2 か所である。
+  #
+  # ただし探す順は逆にし、$HOME に依存しない方を先に採る。ここで張る symlink は
+  # /usr/local/bin に残り、以降のセッションから使われる。実行者の HOME が変われば
+  # 指し先を失うため、system 側の位置を優先する。両者は同じ実体を指す。
+  local nix_bin=
+  local candidate
+  for candidate in /nix/var/nix/profiles/default/bin "$HOME/.nix-profile/bin"; do
+    if [ -x "$candidate/nix" ]; then
+      nix_bin=$candidate
+      break
+    fi
+  done
+
+  if [ -z "$nix_bin" ]; then
+    echo "エラー: Nix の導入先が見つかりません。" >&2
+    echo "       探した場所: \$HOME/.nix-profile/bin、/nix/var/nix/profiles/default/bin" >&2
+    exit 1
+  fi
 
   # 追加パッケージは最後に置く。同名がある場合は後から張った symlink が残るため、
   # フックの経路で PATH の先頭に足すのと同じ優先順位になる。
@@ -698,6 +722,13 @@ install_toolchain() {
 
       name=$(basename "$source")
       target=/usr/local/bin/$name
+
+      # 配置元と配置先が同じものは飛ばす。自分自身へ張り直すと symlink が自己参照になり、
+      # 元の指し先を失う。上の nix_bin の解決で起こらないようにしてあるが、配置元が増えた
+      # ときにも同じ壊れ方をしないよう、ここでも守る。
+      if [ "$source" = "$target" ]; then
+        continue
+      fi
 
       # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
       # symlink (/usr/local/bin) と Nix の実体は対象から除く。
