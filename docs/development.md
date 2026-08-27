@@ -26,7 +26,7 @@ CLAUDE.md                Claude Code 向けの補足
 
 ## CI
 
-`ci.yml` はイメージを構築し、`--network none` のコンテナ内で `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査はコンテナ内で行う。push (main) と pull request で自動実行する。
+`ci.yml` は `make docker-check` を実行する。この target は現在の checkout からイメージを構築し、source を mount で上書きせず、`--network none` のコンテナ内で `make check` を実行する。CI とローカルで同じ target を使い、CI 環境をホストおよびコンテナと別の環境にしない。push (main) と pull request で自動実行する。
 
 `pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で配置し、`docs/` を変更する pull request では生成のみを行う (配置はしない)。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
 
@@ -55,6 +55,8 @@ nix build --no-link .#software
 ```
 
 `Dockerfile` にツール名を追記しない。定義が重複し、不整合が生じる。
+
+クラウド環境のセッションに限って足すものは、ここではなく環境の設定で指定する ([追加のパッケージを指定する](setup.md#追加のパッケージを指定する))。作業対象のリポジトリが必要とする言語のツールチェーンのように、本リポジトリの開発環境そのものには入れない依存が対象である。
 
 開発シェルの stdenv が暗黙に載せるコマンド (`awk` 等) に依存しない。`nix build .#software` 等の通常の profile には含まれないため、そこで壊れる。
 
@@ -128,7 +130,8 @@ PR の作成には外部 action を使わず、ランナー同梱の `gh` と `G
 - シェル: bash または POSIX sh。先頭に `set -euo pipefail` (sh では `set -eu`) を記述する。`shellcheck` を通し、`shfmt --indent 2 --case-indent` で整形する
 - PowerShell: `scripts/wsl-bootstrap.ps1` のみ。静的解析器 (PSScriptAnalyzer) は依存が増えるため導入していない。したがって判断を伴う処理は `scripts/wsl-provision.sh` (shellcheck と `nix flake check` の対象) に置き、bootstrap には provision がまだ存在しない時点でしか実行できないものだけを残す。ファイルは UTF-8 の BOM 付きで保存する (`make check` が検査する)
 - コメント: 実装内容ではなく、その選択の理由を記述する。既存ファイルに合わせて日本語で記述する
-- 整形は手作業ではなく `make fmt` で行う
+- 整形は手作業ではなく `make fmt` で行う。引数なしの `nix fmt` は `.git`、`.direnv`、
+  `.work` を探索対象から除外する
 
 ## コミット
 
@@ -149,6 +152,8 @@ make check
 ```bash
 make docker-check
 ```
+
+`make docker-check` は CI と同じオフラインの全検査である。ツールの存在だけを短時間で確認する場合は `make docker-smoke` を使うが、これは `Dockerfile` または `nix/` の変更後に必要な全検査の代わりにはならない。
 
 WSL 関連の変更は、コンテナ内の検査では実行経路を確認できない。実機で `scripts/wsl-bootstrap.ps1` を検証用の名前で通し、確認後に `-Unregister` する。
 

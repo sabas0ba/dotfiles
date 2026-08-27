@@ -2,6 +2,8 @@
 
 WSL の内部に Linux 環境を構築する。PowerShell で 2 コマンド実行すれば、開発シェルに入れる状態まで到達する。
 
+この bootstrap が対象とする Windows とゲストの system は[対応範囲](index.md#対応範囲)にある。
+
 ```powershell
 git clone https://github.com/sabas0ba/dotfiles.git $HOME\repos\dotfiles
 powershell -ExecutionPolicy Bypass -File $HOME\repos\dotfiles\scripts\wsl-bootstrap.ps1
@@ -37,7 +39,7 @@ WSL 本体は 2.4.4 以降が必要である。`wsl --version` で確認し、�
 | Nix の導入 | 不要 (イメージに含まれる) | bootstrap が [同じ配布物](setup.md#nix-の導入) を入れる |
 | sudo | NixOS-WSL の既定 (パスワード不要) | `/etc/sudoers.d/nixos` に NOPASSWD を置く |
 
-NixOS-WSL は system 層まで本リポジトリの管理下に入る。Ubuntu は flake の入力を増やさずに済む。どちらでも開発シェルとホームディレクトリの構成は他の環境と同一である。
+NixOS-WSL は system 層まで本リポジトリの管理下に入る。Ubuntu は flake の入力を増やさずに済む。どちらでも、対応する開発シェルと home-manager target は共通である。
 
 sudo にパスワードを設けないのは、WSL では `wsl.exe -u root` で無条件に root になれるため、パスワードが境界として機能しないことによる。
 
@@ -79,7 +81,7 @@ make wsl-switch     # system の構成を適用する (NixOS のみ)
 make wsl-isolation  # 隔離の検査のみ
 ```
 
-以降は他の Linux 環境と同一である ([使い方](usage.md) を参照)。利用者名が `flake.nix` の `homeTargets` にあるため `HM_TARGET` の指定は要らない。
+以降の操作は[使い方](usage.md)を参照する。利用者名が `flake.nix` の `homeTargets` にあるため `HM_TARGET` の指定は要らない。
 
 `/etc/wsl.conf` を変更したときは、当該ディストリビューションを停止して反映させる。`wsl --shutdown` は他のディストリビューションも止めるため使わない。
 

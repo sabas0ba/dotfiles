@@ -1,5 +1,7 @@
 # 使い方
 
+操作ごとの対応 system は[対応範囲](index.md#対応範囲)にある。本ページは、使用する機能が対象 system に対応していることを前提とする。
+
 ## 日常の操作
 
 ```bash
@@ -66,7 +68,7 @@ make hm-dry     # 配置内容の確認
 make hm-switch  # 配置の実行
 ```
 
-`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使う。環境ごとに指定する必要はない。明示する場合は `make hm-switch HM_TARGET=<name>` とする。
+`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使う。その名前と system が `homeTargets` の定義に一致する場合は指定不要である。一致する定義がなければ実行できない。既存 target の対応 system は[対応範囲](index.md#対応範囲)にある。明示する場合は `make hm-switch HM_TARGET=<name>` とする。
 
 ### 適用対象
 
@@ -103,9 +105,10 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 ホストと同一の環境をコンテナ内に構築する。`Dockerfile` はツールの一覧を持たず `flake.nix` を評価するため、内容がホストと一致する。
 
 ```bash
-make docker-build                                      # default profile
-make docker-shell TOOLCHAIN_PROFILE=software           # software profile
-make docker-check TOOLCHAIN_PROFILE=hdl                # hdl profile のスモークテスト
+make docker-build                              # default profile のイメージ構築
+make docker-shell TOOLCHAIN_PROFILE=software   # software profile の開発シェルに入る
+make docker-smoke                              # ツールの存在を確認する軽量スモークテスト
+make docker-check TOOLCHAIN_PROFILE=hdl        # hdl profile で CI と同じオフラインの全検査
 ```
 
 直接実行する場合:
@@ -114,10 +117,11 @@ make docker-check TOOLCHAIN_PROFILE=hdl                # hdl profile のスモ�
 docker build -t dotfiles-dev .
 docker build --build-arg DOTFILES_TOOLCHAIN_PROFILE=browser -t dotfiles-browser .
 docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
-docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```
 
 ビルド時に開発シェルを Nix の profile として実体化しているため、起動は約 1 秒でネットワークも要らない。flake のすべての入力のソースを含むので、`--network none` のまま `make check` が通る。
+
+検査用の `docker run` オプションは Makefile の 1 か所に置く。`docker-smoke` と `docker-check` は、現在の Docker build context を `docker-build` でイメージへ保存し、その source を mount で上書きせずに検査する。commit 前の変更も build context に含まれ、`flake.nix`、`flake.lock`、`nix/` に対応する profile、Nix store の閉包、検査対象の source が同じイメージ内で揃う。`docker-smoke` はコマンドの存在だけを短時間で確認し、`docker-check` は `make check` の全項目と、ネットワーク無しでイメージが自己完結することを確認する。対話用の `docker-shell` だけは、編集を反映するため現在の worktree をマウントする。
 
 コンテナ内では名前 `nixpkgs` も `flake.lock` で固定した nixpkgs に解決される。以下はネットワーク無しで動く。
 

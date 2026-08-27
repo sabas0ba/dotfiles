@@ -226,9 +226,11 @@
               exit 0
             fi
 
-            # 対象が与えられない場合はリポジトリ配下の *.nix を対象とする。
-            # nixfmt にディレクトリを渡す方式は非推奨のため、ファイルを列挙する。
-            find . -type f -name '*.nix' -exec nixfmt {} +
+            # 対象が与えられない場合は、管理対象の *.nix だけを列挙する。
+            # worktree や direnv の生成物を変更しないよう、管理外ディレクトリは探索しない。
+            find . \
+              -type d \( -name .git -o -name .direnv -o -name .work \) -prune -o \
+              -type f -name '*.nix' -exec nixfmt {} +
           '';
         }
       );
