@@ -53,6 +53,9 @@ USAGE
 mode=hook
 disposable=0
 
+# 引数は以降の解析で消費するため、記録のために最初に控える。
+argv=("$@")
+
 # 追加パッケージの名前。指定順を保つ。
 extra_packages=()
 
@@ -223,6 +226,199 @@ step() {
 
 note() {
   printf '   %s\n' "$1"
+}
+
+# --- 実行の記録 --------------------------------------------------------------
+
+# 何を元に、いつ、どの指定で環境を構成したかを残す。
+#
+# 構成の出力はセッションの終了とともに失われ、コンテナも作り直されるため、後から
+# 「この環境は何だったのか」を確認する手段が無い。記録があれば、期待と異なる挙動に
+# 出会ったときに、当時の指定まで遡れる。
+#
+# 記録先はリポジトリの checkout と $HOME の双方から独立させる。前者はセッションごとに
+# 作り直され、後者は --setup-script が上書きするため、いずれに置いても履歴が残らない。
+readonly DOTFILES_LOG=/var/log/dotfiles/cloud-setup.log
+
+# 記録する環境変数。
+#
+# 名前を列挙する方式とする。env の全体を取って名前のパターン (*TOKEN* 等) で濾す方式は
+# 採らない。列挙にない名前を取りこぼした時点で秘密が漏れるためである。ここに足すのは、
+# 値が秘密になりえないものに限る。
+readonly LOGGED_ENV=(
+  CLAUDE_CODE_REMOTE
+  CLAUDE_ENV_FILE
+  CODEX_HOME
+  DOTFILES_EXTRA_PACKAGES
+  HOME
+  USER
+)
+
+# 記録が使えるか。書けない場合に構成を止めないための状態である。
+log_disabled=0
+
+# --setup-script が配置したツールの由来。install_toolchain が設定する。
+toolchain_origin=
+
+timestamp() {
+  date -u +%Y-%m-%dT%H:%M:%SZ
+}
+
+# 記録に載せる値を 1 行に収める。
+#
+# 改行を含む値をそのまま書くと、続きが名前の前置きを持たない行として記録に混ざり、
+# 行の構造が壊れる。DOTFILES_EXTRA_PACKAGES は複数行での指定を受け付けるため、これは
+# 実際に起こる。値の中の === や --- が記録の区切りに見える形にもなる。
+#
+# printf %q は制御文字を字面に変える。write_env_file が環境を引き渡す際に使っているのと
+# 同じ方式であり、空白を含む値も 1 つの値として読める形になる。
+log_value() {
+  printf '%q' "$1"
+}
+
+# 引数を 1 行に収める。
+#
+# 要素ごとに引用する。空白で連結すると、空白を含む 1 つの引数
+# (--extra-packages "python3 gcc") と 2 つの引数を区別できない。
+log_argv() {
+  local arg joined=
+
+  if [ "${#argv[@]}" -eq 0 ]; then
+    printf '(なし)'
+    return
+  fi
+
+  for arg in "${argv[@]}"; do
+    joined+=" $(log_value "$arg")"
+  done
+
+  printf '%s' "${joined# }"
+}
+
+# 動かしているリビジョン。取得できない場合もその旨を値とする。
+#
+# --setup-script の経路は本リポジトリを固定せず最新を使う運用を許すため
+# (docs/reproducibility.md)、何を動かしたかは実行時にしか分からない。
+#
+# 未コミットの変更がある場合はその旨を併記する。開発シェルの評価対象は HEAD ではなく
+# 作業ツリーであり (nix 自身も当該リビジョンを -dirty として扱う)、リビジョンだけでは
+# 別の内容の環境が同じ記録になる。記録の目的からするとこれは致命的である。
+#
+# 未追跡のファイルは対象に含めない。flake の評価は git の管理下にあるものだけを見るため、
+# 未追跡のファイルは環境の内容を変えない。--untracked-files=no が nix の判定と一致する。
+repo_revision() {
+  local revision
+
+  if ! revision=$(git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null); then
+    printf '(取得できない: %s は git のリポジトリではない)' "$repo"
+    return
+  fi
+
+  if [ -n "$(git -C "$repo" status --porcelain --untracked-files=no 2>/dev/null)" ]; then
+    printf '%s (未コミットの変更あり)' "$revision"
+    return
+  fi
+
+  printf '%s' "$revision"
+}
+
+# flake.lock が固定している nixpkgs のリビジョン。
+#
+# jq は使わない。フックの経路は開発シェルの外で走るため PATH に無い。nix 自身に JSON を
+# 読ませる。--impure は store の外のファイル (リポジトリ内の flake.lock) を読むために要る。
+# ビルドではなく記録のための読み取りであり、評価結果を何かの入力にはしない。
+#
+# Nix の導入前に呼ばれた場合は取得できない。終了時の記録でのみ使う。
+nixpkgs_revision() {
+  nix eval --raw --impure \
+    --expr "(builtins.fromJSON (builtins.readFile \"$repo/flake.lock\")).nodes.nixpkgs.locked.rev" \
+    2>/dev/null || printf '(取得できない)'
+}
+
+# 記録に 1 行足す。
+#
+# 追記の失敗で構成を止めない。開始時に touch が通っても、以降の書き込みは失敗しうる
+# (領域の不足、装置のエラー、書き込み権限の無い既存ファイル)。保護しない追記は set -e の
+# 下でそのままスクリプトを終わらせ、log_start の時点では EXIT の trap すら未設置であるため
+# 構成が丸ごと落ちる。log_finish で起きた場合は、成功した構成の終了状態を 1 に変えてしまう。
+#
+# 一度書けなくなったら以降は諦める。同じ失敗を行ごとに繰り返しても得るものが無い。
+#
+# 2>/dev/null は追記より前に置く。リダイレクトは左から処理されるため、後ろに置くと
+# 追記の失敗を報せるシェルの出力が抑止されない。
+log_line() {
+  if [ "$log_disabled" -ne 0 ]; then
+    return
+  fi
+
+  if ! printf '%s\n' "$1" 2>/dev/null >>"$DOTFILES_LOG"; then
+    log_disabled=1
+    note "記録を書けなくなったため以降は残さない ($DOTFILES_LOG)"
+  fi
+}
+
+# 記録を開始し、入力を残す。
+#
+# 入力は開始時に書く。終了時にまとめて 1 度で済ませると、途中で異常終了した場合に何も
+# 残らず、記録が最も要る場面で失われるためである。
+#
+# 書けない場合 (権限が無い等) は記録を諦めて構成を続ける。環境が構成できることを、記録が
+# 残ることより優先する。
+log_start() {
+  local name value
+
+  if ! mkdir -p "$(dirname "$DOTFILES_LOG")" 2>/dev/null ||
+    ! touch "$DOTFILES_LOG" 2>/dev/null; then
+    log_disabled=1
+    note "記録を残せない (書き込めない): $DOTFILES_LOG"
+    return
+  fi
+
+  log_line ""
+  log_line "=== $(timestamp) 開始"
+  log_line "経路            $mode"
+  log_line "引数            $(log_argv)"
+  log_line "dotfiles        $(repo_revision)"
+  log_line "nix (固定)      $NIX_VERSION"
+  log_line "追加パッケージ  ${extra_packages[*]:-(なし)}"
+  log_line "環境変数"
+
+  # 未設定であることは値ではないため、引用の対象にしない。
+  for name in "${LOGGED_ENV[@]}"; do
+    if [ -n "${!name+set}" ]; then
+      value=$(log_value "${!name}")
+    else
+      value="(未設定)"
+    fi
+    log_line "  $name=$value"
+  done
+
+  # 上の書き出しの途中で記録が使えなくなった場合は、その旨が既に出ている。
+  if [ "$log_disabled" -eq 0 ]; then
+    note "記録先: $DOTFILES_LOG"
+  fi
+}
+
+# 結果を残す。EXIT の trap から呼ぶため、構成が途中で失敗した場合も記録される。
+#
+# 記録が使えない場合はここで返す。以降の値の取得 (nix の版、nixpkgs のリビジョン) は
+# 捨てる先しかなく、nix の評価の分だけ終了が遅くなるためである。
+log_finish() {
+  local status=$?
+
+  if [ "$log_disabled" -ne 0 ]; then
+    return
+  fi
+
+  log_line "--- $(timestamp) 終了 (状態 $status)"
+  log_line "nix (実行)      $(nix --version 2>/dev/null || printf '(取得できない)')"
+  log_line "nixpkgs         $(nixpkgs_revision)"
+  log_line "追加パッケージ  実体化できなかったもの: ${extra_failed[*]:-(なし)}"
+
+  # フックの経路では配置を行わないため、値を持たない。
+  if [ -n "$toolchain_origin" ]; then
+    log_line "ツール          $toolchain_origin"
+  fi
 }
 
 # --- Nix の導入 --------------------------------------------------------------
@@ -439,15 +635,9 @@ write_env_file() {
 #
 # この経路は本リポジトリを固定せず、最新を使う運用を許す (docs/reproducibility.md)。
 # 固定しない以上、何を動かしているかは実行時にしか分からない。戻す判断ができるよう、
-# 実際に使ったリビジョンを出力する。
+# 実際に使ったリビジョンを出力する。記録にも同じ値を残す。
 show_revision() {
-  local revision
-
-  if revision=$(git -C "$repo" log -1 --format='%H %cs %s' 2>/dev/null); then
-    note "$revision"
-  else
-    note "リビジョンを取得できない ($repo は git のリポジトリではない)"
-  fi
+  note "$(repo_revision)"
 }
 
 # ツールをセッションの PATH に載せる。
@@ -470,11 +660,17 @@ install_toolchain() {
   local count=0
   local shadowed=()
 
+  # 既にある profile は作り直さない。ただし checkout が入れ替わっていた場合、配置する
+  # ツールは以前のリビジョンのものであり、記録の dotfiles の行とは一致しない。どちらで
+  # あったかと、実体がどの store のパスかを記録に残す。store のパスは内容を一意に定める
+  # ため、2 つの実行が同じツールを配置したかどうかはこれで判別できる。
   if [ -e "$profile" ]; then
     note "ツールの profile は既にある ($profile)"
+    toolchain_origin="再利用 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
   else
     nix profile install --profile "$profile" "$repo#default"
     note "ツールを profile として実体化した ($profile)"
+    toolchain_origin="実体化 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
   fi
 
   # profile が空でないことを、配置する前に確かめる。配置の総数で見ると、nix 自身や
@@ -487,9 +683,33 @@ install_toolchain() {
   mkdir -p /usr/local/bin
 
   # nix 自身も対象に含める。他のリポジトリのセッションでも nix develop や nix shell を
-  # 使えるようにするため。導入方式によって置き場所が異なるため、解決済みの nix から辿る。
-  local nix_bin
-  nix_bin=$(dirname "$(command -v nix)")
+  # 使えるようにするため。
+  #
+  # 置き場所を PATH から解決してはならない。本経路は 2 回目以降、自分が置いた
+  # /usr/local/bin/nix を先に見つける。その dirname は配置先と同じ /usr/local/bin になり、
+  # 結果として /usr/local/bin のすべてを自分自身へ張り直す。ln が「same file」で止まるまでに
+  # 置き換えられた分は自己参照の symlink となって壊れ、profile に無いもの (当該環境が元から
+  # 持つツール) は元の指し先を失う。本経路はセッションの開始ごとに走るため実際に到達する。
+  #
+  # Nix の導入先から辿る。候補は load_nix が profile スクリプトを探すのと同じ 2 か所である。
+  #
+  # ただし探す順は逆にし、$HOME に依存しない方を先に採る。ここで張る symlink は
+  # /usr/local/bin に残り、以降のセッションから使われる。実行者の HOME が変われば
+  # 指し先を失うため、system 側の位置を優先する。両者は同じ実体を指す。
+  local nix_bin=
+  local candidate
+  for candidate in /nix/var/nix/profiles/default/bin "$HOME/.nix-profile/bin"; do
+    if [ -x "$candidate/nix" ]; then
+      nix_bin=$candidate
+      break
+    fi
+  done
+
+  if [ -z "$nix_bin" ]; then
+    echo "エラー: Nix の導入先が見つかりません。" >&2
+    echo "       探した場所: \$HOME/.nix-profile/bin、/nix/var/nix/profiles/default/bin" >&2
+    exit 1
+  fi
 
   # 追加パッケージは最後に置く。同名がある場合は後から張った symlink が残るため、
   # フックの経路で PATH の先頭に足すのと同じ優先順位になる。
@@ -502,6 +722,13 @@ install_toolchain() {
 
       name=$(basename "$source")
       target=/usr/local/bin/$name
+
+      # 配置元と配置先が同じものは飛ばす。自分自身へ張り直すと symlink が自己参照になり、
+      # 元の指し先を失う。上の nix_bin の解決で起こらないようにしてあるが、配置元が増えた
+      # ときにも同じ壊れ方をしないよう、ここでも守る。
+      if [ "$source" = "$target" ]; then
+        continue
+      fi
 
       # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
       # symlink (/usr/local/bin) と Nix の実体は対象から除く。
@@ -585,6 +812,12 @@ install_home() {
 }
 
 # --- 実行 --------------------------------------------------------------------
+
+# 記録はここから始める。これより前の経路 (引数の誤り、リモート実行環境でない、
+# --disposable の欠落) は何も構成せずに終わるため、記録する対象が無い。
+step "実行を記録する"
+log_start
+trap log_finish EXIT
 
 if [ "$mode" = setup-script ]; then
   step "使用する dotfiles のリビジョン"
