@@ -1,6 +1,6 @@
 # セットアップ
 
-Linux および macOS 向けの手順である。Windows では先に [Windows (WSL)](windows.md) で WSL 内に環境を作り、その中で本手順を行う (NixOS 経路では bootstrap がここまで自動で行う)。
+Nix が導入済みであれば、[対応する開発シェルの system](index.md#対応範囲) で本ページの「環境に入る」以降を使用できる。Windows では先に [Windows (WSL)](windows.md) で WSL 内に環境を作る (NixOS 経路では bootstrap がここまで自動で行う)。
 
 ## 前提
 
@@ -9,6 +9,8 @@ Linux および macOS 向けの手順である。Windows では先に [Windows (
 - Docker — 任意。コンテナ環境を使う場合のみ
 
 ## Nix の導入
+
+以下は `x86_64-linux` 専用の固定済み手順である。macOS (`x86_64-darwin` / `aarch64-darwin`) および `aarch64-linux` では実行しない。それらの system では [Nix 公式の対象 system 向け導入手順](https://nixos.org/download/)で Nix を導入し、本ページの「環境に入る」へ進む。本リポジトリは、それらの system 向けインストーラと sha256 を固定していない。
 
 配布物をバージョン固定で取得し、チェックサムを検証してから展開する。`curl ... | sh` のようにインストーラを検証せず実行する方式は用いない。
 
@@ -25,7 +27,7 @@ tar -xf "${TARBALL}"
 "nix-${NIX_VERSION}-x86_64-linux/install" --daemon
 ```
 
-上記の sha256 は x86_64-linux 向けの値である。他のアーキテクチャでは対応する配布物の sha256 に置き換える。
+tarball 名、インストーラのパス、checksum コマンドはいずれも system に依存する。ほかの system で上記の sha256 だけを置き換えても動作しない。機能ごとの対応状況は[対応範囲](index.md#対応範囲)にある。
 
 続いて flakes を有効化する (`~/.config/nix/nix.conf` または `/etc/nix/nix.conf`)。
 
@@ -43,7 +45,7 @@ nix develop
 scripts/check-env.sh
 ```
 
-`flake.lock` を同梱しているため、どの環境でも同じ内容の開発シェルになる。
+`flake.lock` を同梱しているため、同じ system では同じ入力から開発シェルを構築する。開発シェルを出力する system は[対応範囲](index.md#対応範囲)にある。
 
 ## direnv
 
@@ -66,6 +68,8 @@ direnv allow
 ## Claude Code のクラウド環境
 
 [Claude Code](https://claude.ai/code) のリモート実行環境では、セッションごとに Nix を持たない Ubuntu のコンテナが用意される。`.claude/settings.json` の SessionStart フックが `scripts/cloud-setup.sh` を呼び、本ページと同じ手順で環境を構成するため、手動の操作は要らない。
+
+この経路の対象 system は[対応範囲](index.md#対応範囲)にある。ほかの CPU architecture には固定済みの Nix 配布物がなく、`cloud-setup.sh` は取得前に停止する。
 
 - Nix の導入 — 版と sha256 は `scripts/nix-pin.sh` で定義し、WSL の Ubuntu 経路と共有する。systemd が無いため単一利用者の方式で入れる
 - 開発シェルの実体化 — `nix develop` の結果を profile として置く (`Dockerfile` と同じ処理)

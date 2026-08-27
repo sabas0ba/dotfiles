@@ -1,5 +1,7 @@
 # 使い方
 
+操作ごとの対応 system は[対応範囲](index.md#対応範囲)にある。本ページは、使用する機能が対象 system に対応していることを前提とする。
+
 ## 日常の操作
 
 ```bash
@@ -29,7 +31,7 @@ make hm-dry     # 配置内容の確認
 make hm-switch  # 配置の実行
 ```
 
-`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使う。環境ごとに指定する必要はない。明示する場合は `make hm-switch HM_TARGET=<name>` とする。
+`HM_TARGET` は既定で実行中のユーザー名 (`id -un`) を使う。その名前と system が `homeTargets` の定義に一致する場合は指定不要である。一致する定義がなければ実行できない。既存 target の対応 system は[対応範囲](index.md#対応範囲)にある。明示する場合は `make hm-switch HM_TARGET=<name>` とする。
 
 ### 適用対象
 
