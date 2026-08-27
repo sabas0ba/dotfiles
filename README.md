@@ -4,11 +4,13 @@ Nix と direnv による再現性のある開発環境。同じ定義からコ�
 
 ドキュメント: <https://sabas0ba.github.io/dotfiles/>
 
+機能ごとの対応 system は[対応範囲](docs/index.md#対応範囲)にまとめている。`nix develop` と `make hm-switch`、Nix の導入手順は対応範囲が異なる。
+
 環境に含まれるツールの一覧は [`nix/packages.nix`](nix/packages.nix) の 1 か所だけで定義する。ホストの開発シェル、`nix build` の profile、Docker イメージがすべてこれを参照するため、環境ごとに内容が食い違わない。
 
 ## はじめに
 
-Linux / macOS:
+Nix が導入済みの対応 system:
 
 ```bash
 git clone https://github.com/sabas0ba/dotfiles.git ~/repos/dotfiles
@@ -16,7 +18,7 @@ cd ~/repos/dotfiles
 nix develop
 ```
 
-Nix の導入から行う場合は [セットアップ](docs/setup.md) を参照する。
+Nix の導入から行う場合は[セットアップ](docs/setup.md)を参照する。固定済み導入例の対象 system は[対応範囲](docs/index.md#対応範囲)に記載している。
 
 Windows (WSL 内に構築する):
 
@@ -30,6 +32,10 @@ powershell -ExecutionPolicy Bypass -File $HOME\repos\dotfiles\scripts\wsl-bootst
 Claude Code のクラウド環境 ([claude.ai/code](https://claude.ai/code)):
 
 リポジトリを開くだけでよい。SessionStart フックが開始時に環境を構成する。環境側に指定する設定は [セットアップ](docs/setup.md#claude-code-のクラウド環境) を参照する。
+
+ChatGPT Codex のクラウド環境 ([公式ドキュメント](https://learn.chatgpt.com/docs/environments/cloud-environment)):
+
+Environment の Setup script に設定が必要となる。設定内容は [セットアップ](docs/setup.md#chatgpt-codex-のクラウド環境) を参照する。
 
 ## ドキュメント
 

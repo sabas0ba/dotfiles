@@ -43,6 +43,11 @@ in
     bash scripts/check-pins.sh
   '';
 
+  # 固定した配布物の cache が、破損や中断から検証済みの内容へ自己復旧すること。
+  pinned-download = mkCheck "pinned-download" [ pkgs.bashInteractive pkgs.coreutils ] ''
+    PINNED_DOWNLOAD_TEST_TMPDIR="$TMPDIR" bash scripts/test-pinned-download.sh
+  '';
+
   # /etc/wsl.conf のマージが、管理外の記述を保ちつつ自分のキーだけを差し替えること。
   # 本リポジトリで唯一の非自明なテキスト処理であり、読んだだけでは確かめられない。
   wsl-conf = mkCheck "wsl-conf" [ pkgs.bashInteractive ] ''
