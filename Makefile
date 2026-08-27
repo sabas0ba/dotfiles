@@ -4,6 +4,10 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 DOCKER_IMAGE ?= dotfiles-dev
+# 検査は mount で上書きせず、docker-build が現在の build context から COPY した source を
+# 使う。commit 前の変更も含めつつ、profile、Nix store の閉包、検査対象の source が同じ
+# image snapshot に揃う。ネットワークを切り、image だけで完結することも確認する。
+DOCKER_RUN_OFFLINE = docker run --rm --network none $(DOCKER_IMAGE)
 NIX ?= nix
 # home-manager の適用対象。flake.nix の homeTargets に定義した名前を指定する。
 # 既定は実行中のユーザー名。環境ごとに指定せずに済むようにするため。
@@ -166,6 +170,10 @@ docker-build: ## 同一の環境を持つコンテナイメージを構築する
 docker-shell: docker-build ## コンテナ内の開発シェルに入る
 	docker run --rm -it -v "$(CURDIR):/workspace" $(DOCKER_IMAGE)
 
+.PHONY: docker-smoke
+docker-smoke: docker-build ## コンテナ内で環境の軽量スモークテストを実行する
+	$(DOCKER_RUN_OFFLINE) scripts/check-env.sh
+
 .PHONY: docker-check
-docker-check: docker-build ## コンテナ内で環境のスモークテストを実行する
-	docker run --rm -v "$(CURDIR):/workspace" $(DOCKER_IMAGE) scripts/check-env.sh
+docker-check: docker-build ## CI 同等の全検査をオフラインのコンテナ内で実行する
+	$(DOCKER_RUN_OFFLINE) make check

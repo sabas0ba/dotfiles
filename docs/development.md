@@ -26,7 +26,7 @@ CLAUDE.md                Claude Code 向けの補足
 
 ## CI
 
-`ci.yml` はイメージを構築し、`--network none` のコンテナ内で `make check` を実行する。CI 環境をホストおよびコンテナと別の環境にしないため、検査はコンテナ内で行う。push (main) と pull request で自動実行する。
+`ci.yml` は `make docker-check` を実行する。この target は現在の checkout からイメージを構築し、source を mount で上書きせず、`--network none` のコンテナ内で `make check` を実行する。CI とローカルで同じ target を使い、CI 環境をホストおよびコンテナと別の環境にしない。push (main) と pull request で自動実行する。
 
 `pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で配置し、`docs/` を変更する pull request では生成のみを行う (配置はしない)。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
 
@@ -142,6 +142,8 @@ make check
 ```bash
 make docker-check
 ```
+
+`make docker-check` は CI と同じオフラインの全検査である。ツールの存在だけを短時間で確認する場合は `make docker-smoke` を使うが、これは `Dockerfile` または `nix/` の変更後に必要な全検査の代わりにはならない。
 
 WSL 関連の変更は、コンテナ内の検査では実行経路を確認できない。実機で `scripts/wsl-bootstrap.ps1` を検証用の名前で通し、確認後に `-Unregister` する。
 

@@ -70,7 +70,8 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 ```bash
 make docker-build   # イメージの構築
 make docker-shell   # コンテナ内の開発シェルに入る (カレントディレクトリをマウント)
-make docker-check   # コンテナ内でのスモークテスト
+make docker-smoke   # ツールの存在を確認する軽量スモークテスト
+make docker-check   # CI と同じオフラインの全検査
 ```
 
 直接実行する場合:
@@ -78,10 +79,11 @@ make docker-check   # コンテナ内でのスモークテスト
 ```bash
 docker build -t dotfiles-dev .
 docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
-docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 ```
 
 ビルド時に開発シェルを Nix の profile として実体化しているため、起動は約 1 秒でネットワークも要らない。flake のすべての入力のソースを含むので、`--network none` のまま `make check` が通る。
+
+検査用の `docker run` オプションは Makefile の 1 か所に置く。`docker-smoke` と `docker-check` は、現在の Docker build context を `docker-build` でイメージへ保存し、その source を mount で上書きせずに検査する。commit 前の変更も build context に含まれ、`flake.nix`、`flake.lock`、`nix/` に対応する profile、Nix store の閉包、検査対象の source が同じイメージ内で揃う。`docker-smoke` はコマンドの存在だけを短時間で確認し、`docker-check` は `make check` の全項目と、ネットワーク無しでイメージが自己完結することを確認する。対話用の `docker-shell` だけは、編集を反映するため現在の worktree をマウントする。
 
 コンテナ内では名前 `nixpkgs` も `flake.lock` で固定した nixpkgs に解決される。以下はネットワーク無しで動く。
 
