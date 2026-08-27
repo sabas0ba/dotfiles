@@ -99,6 +99,8 @@ repo=$(cd "$script_dir/.." && pwd)
 # (scripts/cloud-setup.sh も同じファイルを参照する)。
 # shellcheck source=scripts/nix-pin.sh
 . "$script_dir/nix-pin.sh"
+# shellcheck source=scripts/pinned-download.sh
+. "$script_dir/pinned-download.sh"
 
 step() {
   printf '\n== %s\n' "$1"
@@ -242,14 +244,10 @@ install_nix() {
   mkdir -p "$work"
   chown "$owner" "$repo/.work" "$work"
 
-  if [ ! -f "$work/$tarball" ]; then
-    note "取得する: $url"
-    curl -fsSL -o "$work/$tarball" "$url"
-  fi
-
   # 固定した値と照合する。配布元から取得した .sha256 との照合は、配布物と同時に
   # 差し替えられるため検証にならない。README の導入手順と同じ方針である。
-  printf '%s  %s\n' "$NIX_SHA256" "$work/$tarball" | sha256sum -c -
+  note "Nix の配布物を用意する: $url"
+  pinned_download "$url" "$NIX_SHA256" "$work/$tarball"
 
   tar -xf "$work/$tarball" -C "$work"
 

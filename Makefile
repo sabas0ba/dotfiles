@@ -4,6 +4,10 @@ SHELL := /usr/bin/env bash
 .DEFAULT_GOAL := help
 
 DOCKER_IMAGE ?= dotfiles-dev
+# 検査は mount で上書きせず、docker-build が現在の build context から COPY した source を
+# 使う。commit 前の変更も含めつつ、profile、Nix store の閉包、検査対象の source が同じ
+# image snapshot に揃う。ネットワークを切り、image だけで完結することも確認する。
+DOCKER_RUN_OFFLINE = docker run --rm --network none $(DOCKER_IMAGE)
 NIX ?= nix
 # home-manager の適用対象。flake.nix の homeTargets に定義した名前を指定する。
 # 既定は実行中のユーザー名。環境ごとに指定せずに済むようにするため。
@@ -11,10 +15,17 @@ HM_TARGET ?= $(shell id -un)
 
 .PHONY: help
 help: ## 本ヘルプを表示する
-	@echo "使用方法: make <target>"
-	@echo
-	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) \
-		| awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-14s\033[0m %s\n", $$1, $$2}'
+	@printf '使用方法: make <target>\n\n'
+	@pattern='^([a-zA-Z0-9_-]+):.*## (.*)$$'; \
+	for makefile in $(MAKEFILE_LIST); do \
+		while IFS= read -r line; do \
+			line=$${line%$$'\r'}; \
+			if [[ $$line =~ $$pattern ]]; then \
+				printf '  \033[36m%-14s\033[0m %s\n' \
+					"$${BASH_REMATCH[1]}" "$${BASH_REMATCH[2]}"; \
+			fi; \
+		done < "$$makefile"; \
+	done
 
 # --- ホスト側の環境 ---------------------------------------------------------
 
@@ -160,6 +171,10 @@ docker-build: ## 同一の環境を持つコンテナイメージを構築する
 docker-shell: docker-build ## コンテナ内の開発シェルに入る
 	docker run --rm -it -v "$(CURDIR):/workspace" $(DOCKER_IMAGE)
 
+.PHONY: docker-smoke
+docker-smoke: docker-build ## コンテナ内で環境の軽量スモークテストを実行する
+	$(DOCKER_RUN_OFFLINE) scripts/check-env.sh
+
 .PHONY: docker-check
-docker-check: docker-build ## コンテナ内で環境のスモークテストを実行する
-	docker run --rm -v "$(CURDIR):/workspace" $(DOCKER_IMAGE) scripts/check-env.sh
+docker-check: docker-build ## CI 同等の全検査をオフラインのコンテナ内で実行する
+	$(DOCKER_RUN_OFFLINE) make check
