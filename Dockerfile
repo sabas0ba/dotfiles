@@ -14,6 +14,7 @@
 #
 # 使用方法:
 #   docker build -t dotfiles-dev .
+#   docker build --build-arg DOTFILES_TOOLCHAIN_PROFILE=software -t dotfiles-dev .
 #   docker run --rm -it -v "$PWD:/workspace" dotfiles-dev
 #   docker run --rm -v "$PWD:/workspace" dotfiles-dev scripts/check-env.sh
 #
@@ -25,6 +26,11 @@
 ARG NIX_VERSION=2.35.1
 ARG NIX_IMAGE_DIGEST=sha256:377d4887aca98f0dfa12971c1ea6d6a625a435d8b610d4c95a436843da6fbfd1
 FROM nixos/nix:${NIX_VERSION}@${NIX_IMAGE_DIGEST}
+
+# default は dotfiles 自身の保守に必要な軽量環境である。用途別の toolchain は
+# default/software/containers/hdl/browser/full から build 時に選択する。
+ARG DOTFILES_TOOLCHAIN_PROFILE=default
+ENV DOTFILES_TOOLCHAIN_PROFILE=${DOTFILES_TOOLCHAIN_PROFILE}
 
 # flake を使用するため experimental-features を有効化する。
 # sandbox と filter-syscalls を無効化しているのは、Docker のデフォルト seccomp
@@ -71,7 +77,7 @@ COPY nix ./nix
 # ネットワークを必要としない。
 #
 # 末尾の rm は取得済み tarball の展開キャッシュの削除であり、store は変更しない。
-RUN nix develop --profile "$DOTFILES_PROFILE" --command true \
+RUN nix develop ".#${DOTFILES_TOOLCHAIN_PROFILE}" --profile "$DOTFILES_PROFILE" --command true \
   && nix flake archive --json > /dev/null \
   && nix registry add nixpkgs \
   "path:$(nix eval --raw --impure --expr '(builtins.getFlake "/workspace").inputs.nixpkgs.outPath')" \

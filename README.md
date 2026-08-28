@@ -6,7 +6,7 @@ Nix と direnv による再現性のある開発環境。同じ定義からコ�
 
 機能ごとの対応 system は[対応範囲](docs/index.md#対応範囲)にまとめている。`nix develop` と `make hm-switch`、Nix の導入手順は対応範囲が異なる。
 
-環境に含まれるツールの一覧は [`nix/packages.nix`](nix/packages.nix) の 1 か所だけで定義する。ホストの開発シェル、`nix build` の profile、Docker イメージがすべてこれを参照するため、環境ごとに内容が食い違わない。
+環境に含まれるツール、コマンド契約、用途別 profile は [`nix/packages.nix`](nix/packages.nix) の 1 か所だけで定義する。ホストの開発シェル、`nix build` の profile、Docker イメージがすべてこれを参照するため、環境ごとに内容が食い違わない。既定環境は軽量に保ち、言語、コンテナ、HDL、Playwright は[用途別に選択する](docs/usage.md#toolchain-profile)。
 
 ## はじめに
 

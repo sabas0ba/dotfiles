@@ -2,7 +2,7 @@
 
 Nix と direnv による再現性のある開発環境。同じ定義からコンテナ環境と WSL 環境も構築する。
 
-環境に含まれるツールの一覧は [`nix/packages.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/packages.nix) の 1 か所だけで定義する。ホストの開発シェル、`nix build` の profile、Docker イメージがすべてこれを参照するため、環境ごとに内容が食い違わない。
+環境に含まれるツール、コマンド契約、用途別 profile は [`nix/packages.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/packages.nix) の 1 か所だけで定義する。ホストの開発シェル、`nix build` の profile、Docker イメージがすべてこれを参照するため、環境ごとに内容が食い違わない。既定環境は軽量に保ち、言語、コンテナ、HDL、Playwright は[用途別に選択する](usage.md#toolchain-profile)。
 
 ## 目次
 
