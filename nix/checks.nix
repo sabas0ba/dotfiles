@@ -43,6 +43,20 @@ in
     bash scripts/check-pins.sh
   '';
 
+  # NixOS-WSL の revision とタグコメントを原子的に更新すること。置換対象が不完全な
+  # 場合に片方だけを書き換えた状態を残さないことも fixture で検査する。
+  update-pins =
+    mkCheck "update-pins"
+      [
+        pkgs.bashInteractive
+        pkgs.coreutils
+        pkgs.gnugrep
+        pkgs.gnused
+      ]
+      ''
+        bash scripts/test-update-pins.sh
+      '';
+
   # 固定した配布物の cache が、破損や中断から検証済みの内容へ自己復旧すること。
   pinned-download = mkCheck "pinned-download" [ pkgs.bashInteractive pkgs.coreutils ] ''
     PINNED_DOWNLOAD_TEST_TMPDIR="$TMPDIR" bash scripts/test-pinned-download.sh

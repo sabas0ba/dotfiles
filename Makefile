@@ -52,13 +52,14 @@ bump: ## nixpkgs の rev を更新する (make bump REV=<40 桁の rev>)
 	$(NIX) flake update
 
 .PHONY: bump-wsl
-bump-wsl: ## NixOS-WSL の rev を更新する (make bump-wsl REV=<40 桁の rev>)
-	@test -n "$(REV)" || { \
-		echo "使用方法: make bump-wsl REV=<NixOS-WSL の rev>"; \
-		echo "  release-26.05 上のタグが指すコミット SHA を指定する"; \
+bump-wsl: ## NixOS-WSL の rev とタグを更新する (make bump-wsl REV=<40 桁の rev> TAG=<tag>)
+	@test -n "$(REV)" && test -n "$(TAG)" || { \
+		echo "使用方法: make bump-wsl REV=<NixOS-WSL の rev> TAG=<tag>"; \
+		echo "  REV には release-26.05 上のタグが指すコミット SHA を指定する"; \
+		echo "  TAG にはそのタグ名を指定する"; \
 		exit 1; \
 	}
-	scripts/update-pins.sh nixos-wsl $(REV)
+	scripts/update-pins.sh nixos-wsl "$(REV)" "$(TAG)"
 	$(NIX) flake update
 
 .PHONY: bump-hm

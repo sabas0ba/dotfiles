@@ -18,7 +18,7 @@ usage() {
 対象:
   nixpkgs <rev>                    flake.nix の nixpkgs を更新する
   home-manager <rev>               flake.nix の home-manager を更新する
-  nixos-wsl <rev>                  flake.nix の NixOS-WSL を更新する
+  nixos-wsl <rev> <tag>            flake.nix の NixOS-WSL を更新する
   image <バージョン> <ダイジェスト>  Dockerfile のベースイメージを更新する
   action <owner/repo> <sha>        ワークフローの action を更新する
   nix-installer <バージョン> <sha256> Nix の導入手順と固定を更新する
@@ -29,7 +29,7 @@ usage() {
   nixpkgs        curl -sL https://channels.nixos.org/nixos-26.05/git-revision
   home-manager   https://github.com/nix-community/home-manager の release-26.05 の HEAD
   nixos-wsl      https://github.com/nix-community/NixOS-WSL の release-26.05 上の
-                 タグが指すコミット SHA。nixpkgs のリリースと系列を揃える
+                 タグ名と、そのタグが指すコミット SHA。nixpkgs の系列と揃える
   image          docker buildx imagetools inspect nixos/nix:<バージョン>
   action         https://github.com/<owner>/<repo> の対象タグが指すコミット SHA
   nix-installer  https://releases.nixos.org/nix/nix-<バージョン>/ の .sha256
@@ -162,12 +162,14 @@ case "$target" in
     ;;
 
   nixos-wsl)
-    require_args 1 "$#"
+    require_args 2 "$#"
     require_format "$1" '^[0-9a-f]{40}$' "40 桁のリビジョン"
+    require_format "$2" '^[0-9][0-9A-Za-z._-]*$' "タグ"
+    # URL と同一行のタグコメントを 1 回の置換で更新する。一方だけを先に書き換えると、
+    # 後続の置換に失敗した際に rev とタグが食い違った状態を残すため。
     replace_in_file flake.nix \
-      "s|github:nix-community/NixOS-WSL/[0-9a-f]{40}|github:nix-community/NixOS-WSL/$1|" \
-      "NixOS-WSL のリビジョン"
-    echo "リビジョンに対応するタグを示すコメントも併せて更新すること。"
+      "s|github:nix-community/NixOS-WSL/[0-9a-f]{40}\";[[:space:]]*#[[:space:]]*[0-9][0-9A-Za-z._-]*$|github:nix-community/NixOS-WSL/$1\"; # $2|" \
+      "NixOS-WSL のリビジョンとタグ"
     echo "flake.lock の再生成が必要です (make bump-wsl が続けて実行します)。"
     ;;
 

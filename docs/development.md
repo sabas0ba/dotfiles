@@ -69,11 +69,11 @@ CLAUDE.md                Claude Code 向けの補足
 ```bash
 make bump REV=$(curl -sL https://channels.nixos.org/nixos-26.05/git-revision)   # nixpkgs
 make bump-hm REV=<40 桁の rev>                                                  # home-manager (release-26.05 の HEAD)
-make bump-wsl REV=<40 桁の rev>                                                 # NixOS-WSL (release-26.05 上のタグ)
+make bump-wsl REV=<40 桁の rev> TAG=<tag>                                       # NixOS-WSL (release-26.05 上のタグ)
 make check
 ```
 
-`flake.lock` の再生成を忘れた場合は `make check` が失敗する ([再現性](reproducibility.md) を参照)。NixOS-WSL は `flake.nix` のコメントのタグ名も併せて更新する。
+`flake.lock` の再生成を忘れた場合は `make check` が失敗する ([再現性](reproducibility.md) を参照)。NixOS-WSL は URL の revision と同一行コメントのタグを 1 回の置換で更新し、片方だけが変わった状態を残さない。
 
 ### その他
 
