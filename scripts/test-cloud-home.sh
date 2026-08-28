@@ -6,7 +6,26 @@ script_dir=$(cd "$(dirname "$0")" && pwd)
 # shellcheck source=scripts/cloud-home.sh
 . "$script_dir/cloud-home.sh"
 
-work=${TMPDIR:-$script_dir/../.work}/dotfiles-cloud-home-test
+# 一時ファイルはリポジトリ内の .work に置く (リポジトリの規約)。Nix の check では
+# source が読み取り専用の store にあるため、check 側が書き込み先を明示的に渡す。
+root=$(cd "$script_dir/.." && pwd)
+work_base=${CLOUD_HOME_TEST_TMPDIR:-"$root/.work"}
+work=""
+
+cleanup() {
+  if [ -z "$work" ] || [ ! -d "$work" ]; then
+    return
+  fi
+
+  case $(basename -- "$work") in
+    test-cloud-home.*) rm -rf -- "$work" ;;
+  esac
+}
+
+trap cleanup EXIT
+
+mkdir -p "$work_base"
+work=$(mktemp -d "$work_base/test-cloud-home.XXXXXX")
 repo=$work/repo
 home=$work/home
 codex_home=$work/codex
@@ -14,8 +33,6 @@ codex_home=$work/codex
 note() {
   :
 }
-
-rm -rf "$work"
 mkdir -p "$repo/home/.claude" "$repo/home/.codex" "$home/.claude" "$codex_home"
 printf 'managed-claude\n' >"$repo/home/.claude/settings.json"
 printf 'managed-codex-v1\n' >"$repo/home/.codex/AGENTS.md"
