@@ -85,7 +85,7 @@ bump-help: ## 固定の更新方法を表示する
 	scripts/update-pins.sh --help
 
 .PHONY: check check-all-systems
-check: check-all-systems ## すべての検査を実行する (flake check + 環境のスモークテスト)
+check: check-all-systems ## すべての検査を実行する (静的解析・構成評価・全 system 評価・環境のスモークテスト)
 	$(NIX) flake check
 	scripts/check-env.sh
 

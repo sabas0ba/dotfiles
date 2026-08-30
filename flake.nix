@@ -204,6 +204,7 @@
         import ./nix/checks.nix {
           inherit pkgs;
           src = self;
+          inherit (self) homeConfigurations nixosConfigurations;
         }
       );
 
