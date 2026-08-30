@@ -98,6 +98,8 @@ transaction_dir=""
 transaction_committing=0
 transaction_files=()
 transaction_applied_files=()
+transaction_lock_dir=.work/update-pins.lock
+transaction_lock_held=0
 
 cleanup_transaction() {
   local status=$?
@@ -116,6 +118,10 @@ cleanup_transaction() {
     rm -rf -- "$transaction_dir"
   fi
 
+  if [ "$transaction_lock_held" -eq 1 ]; then
+    rmdir -- "$transaction_lock_dir" 2>/dev/null || true
+  fi
+
   return "$status"
 }
 
@@ -125,6 +131,17 @@ begin_transaction() {
   local path
 
   mkdir -p .work
+
+  # 反映は複数ファイルにまたがる。並行に実行された 2 つの反映が交錯すると、互いに
+  # 半分ずつ書いた不整合が残るため、mkdir の原子性で 1 度に 1 つへ直列化する。
+  # 強制終了で lock が残った場合は、下のメッセージに従って取り除く。
+  if ! mkdir -- "$transaction_lock_dir" 2>/dev/null; then
+    echo "エラー: 別の update-pins.sh が実行中です。" >&2
+    echo "       実行中でなければ $transaction_lock_dir を削除して再実行する。" >&2
+    exit 1
+  fi
+  transaction_lock_held=1
+
   transaction_dir=$(mktemp -d .work/update-pins.XXXXXX)
 
   for path in "$@"; do

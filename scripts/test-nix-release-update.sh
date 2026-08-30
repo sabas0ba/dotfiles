@@ -147,4 +147,26 @@ if ! grep -qF 'nix-release' "$test_dir/legacy-target.log"; then
 fi
 tests=$((tests + 1))
 
+# 反映は lock で直列化される。lock が残っている間は何も変更せずに失敗し、
+# 解除後は同じ指定で成功する。成功した実行は lock を残さない。
+locked=$(new_fixture locked)
+mkdir -- "$locked/.work/update-pins.lock"
+locked_before="$test_dir/locked-before"
+cp -R -- "$locked" "$locked_before"
+if run_update "$locked" nix-release 2.0.0 "$new_digest" "$new_sha" \
+  >"$test_dir/locked.log" 2>&1; then
+  fail "lock が残る状態の更新が成功しました"
+fi
+assert_unchanged "$locked_before" "$locked"
+if ! grep -qF '別の update-pins.sh が実行中です' "$test_dir/locked.log"; then
+  fail "lock による排他のエラー理由が表示されませんでした"
+fi
+rmdir -- "$locked/.work/update-pins.lock"
+run_update "$locked" nix-release 2.0.0 "$new_digest" "$new_sha" >/dev/null
+assert_line "$locked/Dockerfile" 'ARG NIX_VERSION=2.0.0'
+if [ -e "$locked/.work/update-pins.lock" ]; then
+  fail "成功した実行が lock を残しました"
+fi
+tests=$((tests + 1))
+
 echo "update-pins の回帰テストが成功しました ($tests 件)。"
