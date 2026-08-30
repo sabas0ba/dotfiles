@@ -63,9 +63,10 @@ Windows の実行ファイルの起動をいずれも無効化)。目的と定�
 本ファイルを変更した場合、機械的な検査は `scripts/check-pins.sh` による固定の確認
 のみとなる。
 
-このため、判断を伴う処理は `scripts/wsl-provision.sh` (shellcheck / shfmt および
-`nix flake check` の対象) に置く。bootstrap 側に処理を足さないこと。足す場合は、
-provision がまだ存在しない時点でしか実行できないものに限る。
+このため、判断を伴う処理は原則として `scripts/wsl-provision.sh` (shellcheck / shfmt
+および `nix flake check` の対象) に置く。bootstrap 側に残してよいのは、provision が
+まだ存在しない時点で必要な、配布イメージと管理マーカーの照合、利用者の作成、
+リポジトリの検証と取得に限る。
 
 ## 変更後の検証
 

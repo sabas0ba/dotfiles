@@ -26,9 +26,23 @@ WSL 本体は 2.4.4 以降が必要である。`wsl --version` で確認し、�
 | `-Ref` | `main` | 取得する ref |
 | `-User` | `nixos` | WSL 上の利用者 |
 | `-FlakeTarget` | `wsl` | 適用する `nixosConfigurations` の名前 |
+| `-AdoptExisting` | — | 内容を確認済みの未管理環境を明示的に引き継ぐ |
 | `-Unregister` | — | 登録を解除する (仮想ディスクごと削除される) |
 
 各手順は既に済んでいれば飛ばすため、中断してもそのまま再実行できる。配布イメージは `.work/wsl` に保存し、sha256 が一致すれば再取得しない。
+
+登録時には `/etc/dotfiles-wsl-bootstrap.json` に、schema、登録名、distro、配布イメージの URL・version・sha256、利用者、flake target、リポジトリを記録する。同名の WSL ディストリビューションが既にある場合はこのマーカーを完全一致で検査し、無い場合や指定と異なる場合は、利用者作成や system 構成を始める前に停止する。したがって、既存の通常利用用ディストリビューションを既定値の名前だけで取り込むことはない。
+
+マーカーの無い既存ディストリビューションを内容確認後に引き継ぐ場合だけ、`-AdoptExisting` を指定する。マーカーが既にあり、内容が異なる場合は上書きしない。別の `-Name` を使うか、対象を確認して解除する。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
+  -Name NixOS -AdoptExisting
+```
+
+`-Unregister` も管理マーカーを検査する。未管理の同名ディストリビューションは削除しないため、その場合は対象を別途確認した上で `wsl --unregister <名前>` を直接実行する。
+
+リポジトリは `-Ref` を取得時に完全な commit SHA へ解決し、detached HEAD で配置する。解決した ref と SHA はリポジトリローカルの Git config に記録する。再実行時は origin URL、未コミット・未追跡変更、前回記録した HEAD を検査してから取得する。origin が異なる、変更が残る、または管理済み checkout の HEAD が外部で変わっている場合は停止する。未管理の既存 checkout の HEAD だけが指定 ref と異なる場合は、内容確認後に `-AdoptExisting` で引き継げる。
 
 ## 経路の選択
 
@@ -97,7 +111,7 @@ bootstrap が行うことは以下である。
 
 1. 配布イメージを取得し、固定した sha256 と照合する
 2. `wsl --install --from-file` で登録する
-3. 利用者を用意し、リポジトリを取得する
+3. 利用者を用意し、リポジトリの origin と状態を検査して、ref を commit SHA へ解決した detached HEAD を配置する
 4. `scripts/wsl-provision.sh` の段 system を root で実行する
 5. 反映のためディストリビューションを停止する
 6. `scripts/wsl-provision.sh` の段 home を利用者で実行する (`make check` と `make hm-switch`)

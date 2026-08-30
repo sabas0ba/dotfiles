@@ -6,8 +6,8 @@ WSL に本リポジトリの環境を構築する。取得から利用可能な�
 Windows 上で本リポジトリの環境を使うための入り口である。以下を順に行う。
 
   1. 配布イメージを取得し、固定した sha256 と照合する
-  2. wsl --install --from-file で登録する
-  3. 利用者を用意し、リポジトリを取得する
+  2. wsl --install --from-file で登録し、構築時の入力を管理マーカーへ記録する
+  3. 利用者を用意し、リポジトリの ref を commit SHA へ解決して取得する
   4. scripts/wsl-provision.sh の段 system を root で実行する
      (/etc/wsl.conf、sudo、Nix、system の構成)
   5. 設定の反映のためディストリビューションを停止する
@@ -46,7 +46,8 @@ WSL に登録する名前。既定はディストリビューションごとの�
 仮想ディスクの配置先。既定は wsl の既定値に従う。
 
 .PARAMETER Ref
-取得するリポジトリの ref。既定は main。
+取得するリポジトリの ref。既定は main。取得時に commit SHA へ解決し、detached HEAD で
+配置する。
 
 .PARAMETER RepoUrl
 取得するリポジトリ。既定は本リポジトリ。改変版をフォークとして持つ場合に指定する。
@@ -57,6 +58,10 @@ WSL 上の利用者。既定は nixos。flake.nix の homeTargets に同名の�
 
 .PARAMETER FlakeTarget
 適用する nixosConfigurations の名前。既定は wsl。NixOS 経路でのみ使用する。
+
+.PARAMETER AdoptExisting
+同名の未管理ディストリビューション、または指定 ref と HEAD が異なる既存リポジトリを
+明示的に引き継ぐ。origin が異なる、または変更が残るリポジトリは引き継がない。
 
 .PARAMETER Unregister
 登録を解除する。仮想ディスクごと削除される。取得済みのイメージは残る。
@@ -76,6 +81,12 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
 
 .EXAMPLE
 powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 -Unregister -Name NixOS
+
+.EXAMPLE
+内容を確認済みの、同名の未管理ディストリビューションを引き継ぐ。
+
+powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
+  -Name NixOS -AdoptExisting
 #>
 
 # 値の形式を束縛の時点で制限する。以降、WSL 内のシェルへ渡す値は
@@ -90,7 +101,7 @@ param(
 
   [string]$Location,
 
-  [ValidatePattern('^[A-Za-z0-9._/-]+$')]
+  [ValidatePattern('^[A-Za-z0-9][A-Za-z0-9._/-]*$')]
   [string]$Ref = 'main',
 
   [ValidatePattern('^https://\S+$')]
@@ -101,6 +112,8 @@ param(
 
   [ValidatePattern('^[A-Za-z0-9._-]+$')]
   [string]$FlakeTarget = 'wsl',
+
+  [switch]$AdoptExisting,
 
   [switch]$Unregister
 )
@@ -138,6 +151,12 @@ $Images = @{
     DefaultName = 'Ubuntu-24.04'
   }
 }
+
+# 同名の既存ディストリビューションを別の環境と取り違えないため、登録時の入力を
+# ディストリビューション内にも記録する。マーカーが無い環境は明示的に引き継がない。
+$BootstrapMarkerSchema = 1
+$BootstrapMarkerManager = 'sabas0ba/dotfiles/scripts/wsl-bootstrap.ps1'
+$BootstrapMarkerPath = '/etc/dotfiles-wsl-bootstrap.json'
 
 # WSL 内のシェルへ渡す値を単一引用符で囲む。値に含まれる単一引用符は '\'' で閉じ直す。
 #
@@ -238,6 +257,194 @@ function Test-WslRegistered {
   return ($names -contains $DistroName)
 }
 
+# ディストリビューションを登録した入力を、順序が一定の 1 行 JSON にする。完全一致で
+# 照合するため、同じ登録名へ異なるイメージや利用者の構成を適用しない。
+function Get-BootstrapMarker {
+  param([Parameter(Mandatory = $true)][hashtable]$Image)
+
+  return [ordered]@{
+    schema            = $BootstrapMarkerSchema
+    manager           = $BootstrapMarkerManager
+    registrationName  = $Name
+    distro            = $Distro
+    imageVersion      = $Image.Version
+    imageUrl          = $Image.Url
+    imageSha256       = $Image.Sha256
+    user              = $User
+    flakeTarget       = $FlakeTarget
+    repoUrl           = $RepoUrl
+    repoPath          = $RepoPath
+    requestedLocation = $Location
+  } | ConvertTo-Json -Compress
+}
+
+function Test-BootstrapMarkerExists {
+  return (Test-Wsl -Arguments @(
+      '-d', $Name, '-u', 'root', '--',
+      'sh', '-c', '[ -f "$1" ]', 'dotfiles-bootstrap', $BootstrapMarkerPath
+    ))
+}
+
+function Test-BootstrapMarkerMatches {
+  param([Parameter(Mandatory = $true)][string]$Expected)
+
+  return (Test-Wsl -Arguments @(
+      '-d', $Name, '-u', 'root', '--',
+      'sh', '-c', '[ "$(cat "$1")" = "$2" ]',
+      'dotfiles-bootstrap', $BootstrapMarkerPath, $Expected
+    ))
+}
+
+# -Unregister は破壊的なので、現在の pin との完全一致ではなく、このスクリプトが同じ
+# 登録名を管理していることだけを検査する。イメージ更新後も旧環境を安全に解除できる。
+function Test-BootstrapMarkerOwned {
+  $prefix = [ordered]@{
+    schema           = $BootstrapMarkerSchema
+    manager          = $BootstrapMarkerManager
+    registrationName = $Name
+  } | ConvertTo-Json -Compress
+  $prefix = $prefix.Substring(0, $prefix.Length - 1) + ','
+
+  return (Test-Wsl -Arguments @(
+      '-d', $Name, '-u', 'root', '--',
+      'sh', '-c', 'value=$(cat "$1") || exit 1; case "$value" in "$2"*) exit 0;; *) exit 1;; esac',
+      'dotfiles-bootstrap', $BootstrapMarkerPath, $prefix
+    ))
+}
+
+function Set-BootstrapMarker {
+  param([Parameter(Mandatory = $true)][string]$Content)
+
+  # 同じファイルシステム内の一時ファイルから rename し、途中終了で不完全なマーカーを
+  # 残さない。一時ファイルは root だけが書ける /etc に作る。
+  $command = 'umask 022; marker=$1; content=$2; temp="${marker}.tmp.$$"; ' +
+    'if (set -C; printf "%s\n" "$content" > "$temp") && ' +
+    'chmod 0644 "$temp" && mv -f "$temp" "$marker"; then exit 0; fi; ' +
+    'rm -f "$temp"; exit 1'
+  Invoke-Wsl -Arguments @(
+    '-d', $Name, '-u', 'root', '--',
+    'sh', '-c', $command, 'dotfiles-bootstrap', $BootstrapMarkerPath, $Content
+  )
+  if (-not (Test-BootstrapMarkerMatches -Expected $Content)) {
+    throw "$BootstrapMarkerPath の書き込み後の照合に失敗しました。"
+  }
+}
+
+# git が入っている経路と、NixOS-WSL で一時的に gitMinimal を使う経路で共通に実行する。
+# 既存 checkout は origin と変更の有無を検査し、指定 ref を commit SHA に解決してから
+# detached HEAD にする。管理済み checkout の HEAD が外部で変えられていた場合は止める。
+function Initialize-Repository {
+  $repositoryCommand = @'
+set -eu
+
+repo_path=$1
+repo_parent=$2
+repo_url=$3
+requested_ref=$4
+allow_adoption=$5
+
+die() {
+  printf 'エラー: %s\n' "$1" >&2
+  exit 1
+}
+
+if [ -e "$repo_path" ] && [ ! -d "$repo_path/.git" ]; then
+  die "$repo_path は Git リポジトリではありません。退避するか別の -RepoUrl を指定してください。"
+fi
+
+mkdir -p "$repo_parent"
+
+if [ ! -d "$repo_path/.git" ]; then
+  git init --quiet "$repo_path"
+  git -C "$repo_path" remote add origin "$repo_url"
+  git -C "$repo_path" config --local dotfiles.bootstrapSchema 1
+  git -C "$repo_path" config --local dotfiles.bootstrapRef "$requested_ref"
+fi
+
+inside=$(git -C "$repo_path" rev-parse --is-inside-work-tree 2>/dev/null || :)
+[ "$inside" = true ] || die "$repo_path は利用可能な Git worktree ではありません。"
+
+actual_origin=$(git -C "$repo_path" remote get-url --all origin 2>/dev/null || :)
+[ "$actual_origin" = "$repo_url" ] ||
+  die "$repo_path の origin が指定値と一致しません (実際: ${actual_origin:-なし})。"
+
+dirty=$(git -C "$repo_path" status --porcelain --untracked-files=all)
+[ -z "$dirty" ] || die "$repo_path に未コミットまたは未追跡の変更があります。"
+
+schema=$(git -C "$repo_path" config --local --get dotfiles.bootstrapSchema || :)
+stored_ref=$(git -C "$repo_path" config --local --get dotfiles.bootstrapRef || :)
+stored_commit=$(git -C "$repo_path" config --local --get dotfiles.bootstrapCommit || :)
+
+if [ -n "$schema" ]; then
+  [ "$schema" = 1 ] || die "$repo_path の bootstrap schema は未対応です ($schema)。"
+  [ -n "$stored_ref" ] || die "$repo_path に前回解決した ref の記録がありません。"
+  if [ -n "$stored_commit" ]; then
+    current_commit=$(git -C "$repo_path" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || :)
+    [ "$current_commit" = "$stored_commit" ] ||
+      die "$repo_path の HEAD が前回解決した commit ($stored_commit) と一致しません。"
+  fi
+fi
+
+git -C "$repo_path" fetch --force --no-tags origin "$requested_ref"
+resolved_commit=$(git -C "$repo_path" rev-parse --verify 'FETCH_HEAD^{commit}')
+
+case "$resolved_commit" in
+  *[!0-9a-f]*|'') die "$requested_ref を完全な commit SHA に解決できませんでした。" ;;
+esac
+[ "${#resolved_commit}" -eq 40 ] ||
+  die "$requested_ref を 40 桁の commit SHA に解決できませんでした ($resolved_commit)。"
+
+if [ -z "$schema" ]; then
+  current_commit=$(git -C "$repo_path" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || :)
+  if [ -n "$current_commit" ] && [ "$current_commit" != "$resolved_commit" ] &&
+    [ "$allow_adoption" != 1 ]; then
+    die "$repo_path の HEAD ($current_commit) は $requested_ref ($resolved_commit) と異なります。引き継ぐ場合は -AdoptExisting を指定してください。"
+  fi
+  git -C "$repo_path" config --local dotfiles.bootstrapSchema 1
+fi
+
+git -C "$repo_path" config --local dotfiles.bootstrapRef "$requested_ref"
+git -C "$repo_path" checkout --quiet --detach "$resolved_commit"
+git -C "$repo_path" config --local dotfiles.bootstrapCommit "$resolved_commit"
+
+head_commit=$(git -C "$repo_path" rev-parse --verify HEAD)
+[ "$head_commit" = "$resolved_commit" ] || die "$repo_path の checkout 後の HEAD が一致しません。"
+if git -C "$repo_path" symbolic-ref --quiet HEAD >/dev/null 2>&1; then
+  die "$repo_path の HEAD が detached 状態ではありません。"
+fi
+
+dirty=$(git -C "$repo_path" status --porcelain --untracked-files=all)
+[ -z "$dirty" ] || die "$repo_path の checkout 後に変更が残っています。"
+
+printf '  ok      ref %s を commit %s に解決した (detached HEAD)\n' \
+  "$requested_ref" "$resolved_commit"
+'@
+
+  $adoption = if ($AdoptExisting) { '1' } else { '0' }
+  $arguments = @('dotfiles-bootstrap', $RepoPath, $RepoParent, $RepoUrl, $Ref, $adoption)
+
+  if (Test-Wsl -Arguments @('-d', $Name, '-u', $User, '--', 'sh', '-c', 'command -v git')) {
+    Invoke-Wsl -Arguments (@(
+        '-d', $Name, '-u', $User, '--',
+        'sh', '-c', $repositoryCommand
+      ) + $arguments)
+    return
+  }
+
+  # NixOS-WSL の配布イメージには git が含まれない。Nix から取る。gitMinimal は
+  # perl や curl を伴わないため、この処理のために取得する量が小さい。
+  $parts = @(
+    'sh'
+    '-c'
+    (ConvertTo-ShQuoted $repositoryCommand)
+  ) + ($arguments | ForEach-Object { ConvertTo-ShQuoted $_ })
+  $runCommand = $parts -join ' '
+  Invoke-Wsl -Arguments @(
+    '-d', $Name, '-u', $User, '--',
+    'nix-shell', '-p', 'gitMinimal', '--run', $runCommand
+  )
+}
+
 # wsl --terminate は停止の完了を待たずに戻る。直後に起動すると、停止しきっていない
 # 実体に接続することがあり、/etc/wsl.conf の変更 (隔離の設定) が反映されないまま次の
 # 段が動く。実際に一覧から消えるまで待つ。
@@ -310,10 +517,17 @@ if (-not $Name) {
   $Name = $image.DefaultName
 }
 
+if ($AdoptExisting -and $Unregister) {
+  throw '-AdoptExisting と -Unregister は同時に指定できません。未管理の環境は wsl --unregister で明示的に解除してください。'
+}
+
 if ($Unregister) {
   if (-not (Test-WslRegistered -DistroName $Name)) {
     Write-Host "$Name は登録されていません。"
     return
+  }
+  if (-not (Test-BootstrapMarkerOwned)) {
+    throw "$Name はこのスクリプトが管理するディストリビューションと確認できません。安全のため解除しません。"
   }
   Write-Host "  解除    $Name の登録を解除する (仮想ディスクごと削除される)"
   Invoke-Wsl -Arguments @('--unregister', $Name)
@@ -330,6 +544,27 @@ Write-Host "登録名: $Name"
 Write-Host "リポジトリ: $RepoUrl ($Ref) -> $RepoPath"
 Write-Host ''
 
+$registered = Test-WslRegistered -DistroName $Name
+$expectedMarker = Get-BootstrapMarker -Image $image
+
+# 既存の同名環境へ触る前に所有と構築時の入力を確認する。マーカーがあるが内容が異なる
+# 場合は -AdoptExisting でも上書きせず、別名での構築または明示的な解除を要求する。
+if ($registered) {
+  if (Test-BootstrapMarkerExists) {
+    if (-not (Test-BootstrapMarkerMatches -Expected $expectedMarker)) {
+      throw "$Name の管理マーカーが現在の指定と一致しません。別の -Name を使うか、内容を確認して解除してください。"
+    }
+    Write-Host "  ok      $Name の管理マーカーが現在の指定と一致する"
+  }
+  elseif (-not $AdoptExisting) {
+    throw "$Name は登録済みですが管理マーカーがありません。内容を確認し、引き継ぐ場合だけ -AdoptExisting を指定してください。"
+  }
+  else {
+    Write-Host "  引継ぎ  未管理の $Name に管理マーカーを配置する"
+    Set-BootstrapMarker -Content $expectedMarker
+  }
+}
+
 # --- 1. 取得と照合 ---
 if (-not (Test-Path -LiteralPath $workDir)) {
   New-Item -ItemType Directory -Path $workDir -Force | Out-Null
@@ -339,7 +574,7 @@ Get-PinnedImage -Image $image -Path $imagePath
 # --- 2. 登録 ---
 # WSL 2.4.4 以降は .wsl 形式をそのまま登録できる。それより古い場合は本コマンドが
 # 失敗するため、WSL を更新する (wsl --update)。
-if (Test-WslRegistered -DistroName $Name) {
+if ($registered) {
   Write-Host "  ok      $Name は既に登録されている"
 }
 else {
@@ -353,6 +588,8 @@ else {
   }
   Write-Host "  登録    wsl $($installArgs -join ' ')"
   Invoke-Wsl -Arguments $installArgs
+  Set-BootstrapMarker -Content $expectedMarker
+  Write-Host "  ok      管理マーカーを配置した ($BootstrapMarkerPath)"
 }
 
 # --- 3. 利用者とリポジトリ ---
@@ -365,30 +602,8 @@ if (-not (Test-Wsl -Arguments @('-d', $Name, '-u', 'root', '--', 'id', '-u', $Us
   )
 }
 
-if (Test-Wsl -Arguments @('-d', $Name, '-u', $User, '--', 'test', '-d', "$RepoPath/.git")) {
-  Write-Host "  ok      リポジトリは取得済み ($RepoPath)"
-}
-else {
-  Write-Host "  取得    $RepoUrl ($Ref)"
-  Invoke-Wsl -Arguments @('-d', $Name, '-u', $User, '--', 'mkdir', '-p', $RepoParent)
-
-  if (Test-Wsl -Arguments @('-d', $Name, '-u', $User, '--', 'sh', '-lc', 'command -v git')) {
-    Invoke-Wsl -Arguments @(
-      '-d', $Name, '-u', $User, '--',
-      'git', 'clone', '--branch', $Ref, $RepoUrl, $RepoPath
-    )
-  }
-  else {
-    # NixOS-WSL の配布イメージには git が含まれない。Nix から取る。gitMinimal は
-    # perl や curl を伴わないため、この 1 回のために取得する量が小さい。
-    $cloneCommand = 'git clone --branch {0} {1} {2}' -f `
-      (ConvertTo-ShQuoted $Ref), (ConvertTo-ShQuoted $RepoUrl), (ConvertTo-ShQuoted $RepoPath)
-    Invoke-Wsl -Arguments @(
-      '-d', $Name, '-u', $User, '--',
-      'nix-shell', '-p', 'gitMinimal', '--run', $cloneCommand
-    )
-  }
-}
+Write-Host "  取得    $RepoUrl ($Ref)"
+Initialize-Repository
 
 # --- 4. 段 system ---
 Write-Host '  構成    provision の段 system を実行する'
