@@ -57,6 +57,21 @@ in
         bash scripts/test-update-pins.sh
       '';
 
+  # Nix release の複数ファイルにまたがる更新が原子的であること。実際の固定は変更せず、
+  # fixture を複製して version 据え置き、version 更新、失敗、差分なしを検査する。
+  nix-release-update =
+    mkCheck "nix-release-update"
+      [
+        pkgs.bashInteractive
+        pkgs.coreutils
+        pkgs.diffutils
+        pkgs.gnugrep
+        pkgs.gnused
+      ]
+      ''
+        UPDATE_PINS_TEST_TMPDIR="$TMPDIR" bash scripts/test-nix-release-update.sh
+      '';
+
   # 固定した配布物の cache が、破損や中断から検証済みの内容へ自己復旧すること。
   pinned-download = mkCheck "pinned-download" [ pkgs.bashInteractive pkgs.coreutils ] ''
     PINNED_DOWNLOAD_TEST_TMPDIR="$TMPDIR" bash scripts/test-pinned-download.sh
