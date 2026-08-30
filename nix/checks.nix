@@ -72,6 +72,20 @@ in
         UPDATE_PINS_TEST_TMPDIR="$TMPDIR" bash scripts/test-nix-release-update.sh
       '';
 
+  # action 名に含まれる `.` が任意の 1 文字として解釈されず、近似名を更新しないこと。
+  action-pin-update =
+    mkCheck "action-pin-update"
+      [
+        pkgs.bashInteractive
+        pkgs.coreutils
+        pkgs.findutils
+        pkgs.gnugrep
+        pkgs.gnused
+      ]
+      ''
+        bash scripts/test-action-pin-update.sh
+      '';
+
   # 固定した配布物の cache が、破損や中断から検証済みの内容へ自己復旧すること。
   pinned-download = mkCheck "pinned-download" [ pkgs.bashInteractive pkgs.coreutils ] ''
     PINNED_DOWNLOAD_TEST_TMPDIR="$TMPDIR" bash scripts/test-pinned-download.sh
