@@ -68,6 +68,20 @@ in
     bash scripts/test-wsl-conf.sh
   '';
 
+  # Cloud Setup の home/ 配置先、CODEX_HOME の fallback、backup の一回性。
+  # source は読み取り専用の store にあるため、書き込み先を明示して渡す。
+  cloud-home = mkCheck "cloud-home" [ pkgs.bashInteractive pkgs.coreutils pkgs.findutils ] ''
+    CLOUD_HOME_TEST_TMPDIR="$TMPDIR" bash scripts/test-cloud-home.sh
+  '';
+
+  # hook や permission の JSON が壊れると設定全体が読み込まれない。
+  # jq に複数ファイルを渡すと -e は最後の出力しか見ないため、1 ファイルずつ検査する。
+  settings-json = mkCheck "settings-json" [ pkgs.jq ] ''
+    for settings in .claude/settings.json home/.claude/settings.json; do
+      jq -e 'type == "object"' "$settings" >/dev/null
+    done
+  '';
+
   # シェルスクリプトの静的解析。.envrc も bash として検査する。
   shellcheck = mkCheck "shellcheck" [ pkgs.shellcheck ] ''
     shellcheck scripts/*.sh
