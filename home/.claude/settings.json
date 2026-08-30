@@ -26,6 +26,7 @@
       "Bash(gcloud *)",
       "Bash(kubectl *)",
       "Bash(docker *)",
+      "Bash(podman *)",
       "Bash(ssh *)",
       "Bash(scp *)",
       "Bash(rsync *)",
