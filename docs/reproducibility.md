@@ -12,12 +12,18 @@
 | ベースイメージ | タグ + ダイジェスト (`@sha256:...`) | `Dockerfile` |
 | GitHub Actions | コミット SHA | `.github/workflows/` |
 | CI ランナー | バージョン付きラベル (`ubuntu-24.04`) | `.github/workflows/` |
-| Nix インストーラ | バージョン + sha256 | `docs/setup.md` および `scripts/wsl-provision.sh` |
+| Nix インストーラ | バージョン + sha256 | `scripts/nix-pin.sh` |
 | ロケール | `LC_ALL=C.UTF-8` | `nix/devshell.nix` |
 
 `flake.lock` は再現性の要件であるため必ずコミットする。存在しない場合は `make lock` で生成する。
 
 クラウド環境の Setup script が参照する本リポジトリ自身も、40桁の commit SHAで固定する ([セットアップ](setup.md#他のリポジトリで使う))。設定欄はリポジトリの外にあり本リポジトリの CI では値を検査できないため、Setup script は形式と取得後の commit を実行時に検査する。`scripts/cloud-setup.sh` も使用したリビジョンを出力する。
+
+Nix インストーラの固定値は `scripts/nix-pin.sh` を単一の定義箇所とする。`docs/setup.md`、`scripts/wsl-provision.sh`、`scripts/cloud-setup.sh` はこの値を参照し、Docker ベースイメージの Nix バージョンとの一致を `scripts/check-pins.sh` が検査する。
+
+固定対象には次の例外がある。
+
+- GitHub Pages の Jekyll 実行環境。ワークフローで呼び出す Actions はコミット SHA に固定する一方、Jekyll とその依存は GitHub Pages が提供する環境を使用し、リポジトリ内には重複して固定しない。公開文書の生成にだけ使用し、開発環境や配布する構成の入力にはしない。
 
 固定されているかは 2 つのスクリプトが検査する。どちらもネットワークを使わず、working tree の内容だけを見る。いずれも「上流に新しい版があるか」は見ない。それは更新の判断であって検査の対象ではないため ([開発](development.md#固定を更新する) を参照)。
 
@@ -39,9 +45,9 @@ nix 自身が検出するのは、lock の再生成が必要になる乖離 (rev
 - `Dockerfile` の `FROM` がダイジェストで固定されていること。`ARG` 経由の参照も展開して判定する (既定値を持たない `ARG` はビルド時に差し替え可能なため固定とみなさない)
 - ワークフローの `uses` がコミット SHA で固定されていること
 - ワークフローの `runs-on` が `-latest` でないこと
-- `docs/setup.md` の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` と一致すること
-- `docs/setup.md` に固定した `NIX_SHA256` があり、配布元から取得した値との照合になっていないこと
-- `scripts/wsl-provision.sh` の `NIX_VERSION` と `NIX_SHA256` が `docs/setup.md` と一致すること。経路によって異なる版の Nix が入るのを防ぐため
+- `scripts/nix-pin.sh` と `docs/setup.md` の `NIX_VERSION` および `NIX_SHA256` が一致し、前者の `NIX_VERSION` が `Dockerfile` の `ARG NIX_VERSION` とも一致すること
+- `docs/setup.md` の導入例が固定した `NIX_SHA256` を使用し、配布元から実行時に取得した値との照合になっていないこと
+- `scripts/wsl-provision.sh` と `scripts/cloud-setup.sh` が Nix の固定値を複製せず、`scripts/nix-pin.sh` を参照すること。経路によって異なる版の Nix が入るのを防ぐため
 - `scripts/wsl-bootstrap.ps1` の配布イメージが https の URL と 64 桁の sha256 で固定されており、こちらも配布元から取得した値との照合になっていないこと
 - `scripts/wsl-bootstrap.ps1` に UTF-8 の BOM があること。Windows PowerShell 5.1 は BOM の無い `.ps1` を ANSI コードページとして読むため、日本語環境では構文エラーになる
 
