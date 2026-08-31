@@ -24,21 +24,20 @@ on:
           - nixpkgs
           - home-manager
           - nixos-wsl
-          - image
+          - nix-release
           - action
-          - nix-installer
           - wsl-image
       value:
-        description: "1 つ目の値 (rev / distro / バージョン / owner/repo)"
+        description: "1 つ目の値 (rev / distro / Nix version / owner/repo)"
         required: true
         type: string
       value2:
-        description: "2 つ目の値 (タグ / バージョン / ダイジェスト / sha256 / コミット SHA。不要な対象では空)"
+        description: "2 つ目の値 (tag / WSL version / image digest / commit SHA。不要な対象では空)"
         required: false
         default: ""
         type: string
       value3:
-        description: "3 つ目の値 (WSL イメージの URL。不要な対象では空)"
+        description: "3 つ目の値 (WSL image URL / installer sha256。不要な対象では空)"
         required: false
         default: ""
         type: string
@@ -82,9 +81,13 @@ jobs:
               values=("$VALUE")
               unused_values=("$VALUE2" "$VALUE3" "$VALUE4")
               ;;
-            nixos-wsl | image | action | nix-installer)
+            nixos-wsl | action)
               values=("$VALUE" "$VALUE2")
               unused_values=("$VALUE3" "$VALUE4")
+              ;;
+            nix-release)
+              values=("$VALUE" "$VALUE2" "$VALUE3")
+              unused_values=("$VALUE4")
               ;;
             wsl-image)
               values=("$VALUE" "$VALUE2" "$VALUE3" "$VALUE4")

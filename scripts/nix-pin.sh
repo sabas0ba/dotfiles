@@ -7,7 +7,7 @@
 # 本ファイルの 1 か所に置く。docs/setup.md の導入手順および Dockerfile の
 # ベースイメージと同一の版であること (scripts/check-pins.sh が検査する)。
 #
-# 更新: scripts/update-pins.sh nix-installer <バージョン> <sha256>
+# 更新: scripts/update-pins.sh nix-release <バージョン> <image digest> <sha256>
 #
 # 値は source した側が使用する。本ファイル単体では未使用に見えるため SC2034 を抑止する。
 # shellcheck disable=SC2034

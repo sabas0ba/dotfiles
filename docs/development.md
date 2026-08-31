@@ -90,26 +90,29 @@ make check
 `flake.lock` の再生成を伴わないものは `scripts/update-pins.sh` を直接呼ぶ。対象と値の取得方法は `make bump-help` で一覧できる。
 
 ```bash
-# ベースイメージ (docker buildx imagetools inspect nixos/nix:<バージョン> で取得)
-scripts/update-pins.sh image 2.35.1 sha256:377d4887...
+# Nix release。ベースイメージと導入用 tarball の固定を一括更新する
+scripts/update-pins.sh nix-release 2.35.1 sha256:377d4887... c3fe2977...
 
 # GitHub Actions (対象タグが指すコミット SHA)
 scripts/update-pins.sh action actions/checkout 11bd7190...
-
-# Nix インストーラ (releases.nixos.org の .sha256)
-scripts/update-pins.sh nix-installer 2.35.1 c3fe2977...
 
 # WSL の配布イメージ
 scripts/update-pins.sh wsl-image nixos 2605.7.2 https://.../nixos.wsl e7180ad5...
 scripts/update-pins.sh wsl-image ubuntu 24.04.4 https://.../ubuntu-...wsl 9b2f7730...
 ```
 
+Nix release は `Dockerfile` の版と image digest、`docs/setup.md` および
+`scripts/nix-pin.sh` の版と installer sha256 を transaction として更新する。version が
+同じまま digest または sha256 だけを更新する場合も、この対象を使用する。旧 `image` と
+`nix-installer` は、固定の一部だけを変更しないよう廃止している。すべての値が既存の固定と
+同じ場合は、ファイルを書き換えずに失敗する。
+
 WSL の配布イメージの値は、配布物と同じ場所に置かれたチェックサムファイル以外から取る。同時に差し替えられるものと照合しても検証にならないため。
 
 - NixOS-WSL: GitHub の releases に置かれた `nixos.wsl` と、GitHub API が返す当該アセットのダイジェスト
 - Ubuntu: Microsoft が配布する [`DistributionInfo.json`](https://raw.githubusercontent.com/microsoft/WSL/master/distributions/DistributionInfo.json) の `Amd64Url` (`Url` と `Sha256`)
 
-ベースイメージを更新した場合は `docs/setup.md` の `NIX_VERSION` も一致させる。不一致は `make check` が検出する。
+Nix release の各値の不一致は `make check` が検出する。
 
 ### CI から更新して PR を作成する
 

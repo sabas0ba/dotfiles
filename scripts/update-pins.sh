@@ -7,6 +7,7 @@
 #
 # 本スクリプトはファイルの書き換えのみを行う。flake.lock の再生成は Makefile 側で
 # 行う (make bump / make bump-hm)。書き換え後は make check を実行すること。
+# Nix 本体に関する固定は複数ファイルにまたがるため、nix-release で一括更新する。
 #
 #   使用方法: scripts/update-pins.sh <対象> <値...>
 set -euo pipefail
@@ -19,9 +20,9 @@ usage() {
   nixpkgs <rev>                    flake.nix の nixpkgs を更新する
   home-manager <rev>               flake.nix の home-manager を更新する
   nixos-wsl <rev> <tag>            flake.nix の NixOS-WSL を更新する
-  image <バージョン> <ダイジェスト>  Dockerfile のベースイメージを更新する
+  nix-release <バージョン> <ダイジェスト> <sha256>
+                                    Nix の版、ベースイメージ、導入用 tarball を一括更新する
   action <owner/repo> <sha>        ワークフローの action を更新する
-  nix-installer <バージョン> <sha256> Nix の導入手順と固定を更新する
   wsl-image <distro> <バージョン> <url> <sha256>
                                    WSL の配布イメージを更新する (distro: nixos | ubuntu)
 
@@ -30,9 +31,10 @@ usage() {
   home-manager   https://github.com/nix-community/home-manager の release-26.05 の HEAD
   nixos-wsl      https://github.com/nix-community/NixOS-WSL の release-26.05 上の
                  タグ名と、そのタグが指すコミット SHA。nixpkgs の系列と揃える
-  image          docker buildx imagetools inspect nixos/nix:<バージョン>
+  nix-release    image digest: docker buildx imagetools inspect nixos/nix:<バージョン>
+                  installer sha256: https://releases.nixos.org/nix/nix-<バージョン>/
+                  の x86_64-linux 用 .sha256
   action         https://github.com/<owner>/<repo> の対象タグが指すコミット SHA
-  nix-installer  https://releases.nixos.org/nix/nix-<バージョン>/ の .sha256
   wsl-image      nixos:  https://github.com/nix-community/NixOS-WSL/releases の
                          nixos.wsl と、GitHub API が返すアセットのダイジェスト
                  ubuntu: https://raw.githubusercontent.com/microsoft/WSL/master/
@@ -87,6 +89,131 @@ replace_in_file() {
 
   printf '%s\n' "$after" >"$path"
   echo "  更新    $path ($label)"
+}
+
+# Nix release の固定は Dockerfile、導入手順、導入スクリプトに分散している。元ファイルを
+# 逐次書き換えると、後続の置換に失敗した時点で不整合な working tree が残る。そのため
+# 全ファイルを .work 以下へ複製し、対象と結果を検証してから反映する。
+transaction_dir=""
+transaction_committing=0
+transaction_files=()
+transaction_applied_files=()
+transaction_lock_dir=.work/update-pins.lock
+transaction_lock_held=0
+
+cleanup_transaction() {
+  local status=$?
+  local path
+
+  if [ "$transaction_committing" -eq 1 ] && [ "$status" -ne 0 ]; then
+    echo "エラー: 更新の反映に失敗したため、変更済みのファイルを元に戻します。" >&2
+    for path in "${transaction_applied_files[@]}"; do
+      if ! cp -p -- "$transaction_dir/original/$path" "$path"; then
+        echo "エラー: $path を元に戻せませんでした。" >&2
+      fi
+    done
+  fi
+
+  if [[ $transaction_dir == .work/update-pins.* ]] && [ -d "$transaction_dir" ]; then
+    rm -rf -- "$transaction_dir"
+  fi
+
+  if [ "$transaction_lock_held" -eq 1 ]; then
+    rmdir -- "$transaction_lock_dir" 2>/dev/null || true
+  fi
+
+  return "$status"
+}
+
+trap cleanup_transaction EXIT
+
+begin_transaction() {
+  local path
+
+  mkdir -p .work
+
+  # 反映は複数ファイルにまたがる。並行に実行された 2 つの反映が交錯すると、互いに
+  # 半分ずつ書いた不整合が残るため、mkdir の原子性で 1 度に 1 つへ直列化する。
+  # 強制終了で lock が残った場合は、下のメッセージに従って取り除く。
+  if ! mkdir -- "$transaction_lock_dir" 2>/dev/null; then
+    echo "エラー: 別の update-pins.sh が実行中です。" >&2
+    echo "       実行中でなければ $transaction_lock_dir を削除して再実行する。" >&2
+    exit 1
+  fi
+  transaction_lock_held=1
+
+  transaction_dir=$(mktemp -d .work/update-pins.XXXXXX)
+
+  for path in "$@"; do
+    if [ ! -f "$path" ]; then
+      echo "エラー: 更新対象のファイルがありません: $path" >&2
+      exit 1
+    fi
+
+    mkdir -p \
+      "$transaction_dir/original/$(dirname "$path")" \
+      "$transaction_dir/staged/$(dirname "$path")"
+    cp -p -- "$path" "$transaction_dir/original/$path"
+    cp -p -- "$path" "$transaction_dir/staged/$path"
+    transaction_files+=("$path")
+  done
+}
+
+replace_in_transaction() {
+  local path=$1 pattern=$2 expression=$3 desired=$4 label=$5
+  local staged matches current temporary
+
+  staged="$transaction_dir/staged/$path"
+  matches=$(grep -cE -- "$pattern" "$staged" || true)
+  if [ "$matches" -ne 1 ]; then
+    echo "エラー: $path に $label が一意に見つかりません (見つかった数: $matches)。" >&2
+    exit 1
+  fi
+
+  current=$(grep -E -- "$pattern" "$staged")
+  current=${current%$'\r'}
+  if [ "$current" = "$desired" ]; then
+    return
+  fi
+
+  temporary="$staged.new"
+  sed -E "$expression" "$staged" >"$temporary"
+  mv -- "$temporary" "$staged"
+}
+
+commit_transaction() {
+  local path prepared
+  local changed=()
+
+  for path in "${transaction_files[@]}"; do
+    if ! cmp -s -- "$transaction_dir/original/$path" "$transaction_dir/staged/$path"; then
+      changed+=("$path")
+    fi
+  done
+
+  if [ "${#changed[@]}" -eq 0 ]; then
+    echo "エラー: 指定された固定はすべて既に同じ値です。変更はありません。" >&2
+    exit 1
+  fi
+
+  # 反映前に全ファイルの一時ファイルを準備する。反映中に失敗した場合は EXIT trap が
+  # original の複製から復元する。
+  for path in "${changed[@]}"; do
+    prepared="$transaction_dir/prepared/$path"
+    mkdir -p "$(dirname "$prepared")"
+    cp -p -- "$transaction_dir/staged/$path" "$prepared"
+  done
+
+  transaction_committing=1
+  for path in "${changed[@]}"; do
+    mv -- "$transaction_dir/prepared/$path" "$path"
+    transaction_applied_files+=("$path")
+  done
+  transaction_committing=0
+
+  for path in "${changed[@]}"; do
+    echo "  更新    $path"
+  done
 }
 
 # PowerShell のハッシュテーブルのうち、指定した distro のブロック内のみを書き換える。
@@ -173,17 +300,44 @@ case "$target" in
     echo "flake.lock の再生成が必要です (make bump-wsl が続けて実行します)。"
     ;;
 
-  image)
-    require_args 2 "$#"
+  nix-release)
+    require_args 3 "$#"
     require_format "$1" '^[0-9][0-9A-Za-z._-]*$' "バージョン"
     require_format "$2" '^sha256:[0-9a-f]{64}$' "sha256: から始まるダイジェスト"
-    replace_in_file Dockerfile \
-      "s|^ARG NIX_VERSION=.*|ARG NIX_VERSION=$1|" \
+    require_format "$3" '^[0-9a-f]{64}$' "64 桁の sha256"
+
+    begin_transaction Dockerfile docs/setup.md scripts/nix-pin.sh
+    replace_in_transaction Dockerfile \
+      '^ARG NIX_VERSION=[^[:space:]]+[[:space:]]*$' \
+      "s|^(ARG NIX_VERSION=)[^[:space:]]+|\\1$1|" \
+      "ARG NIX_VERSION=$1" \
       "ベースイメージのバージョン"
-    replace_in_file Dockerfile \
-      "s|^ARG NIX_IMAGE_DIGEST=.*|ARG NIX_IMAGE_DIGEST=$2|" \
+    replace_in_transaction Dockerfile \
+      '^ARG NIX_IMAGE_DIGEST=sha256:[0-9a-f]{64}[[:space:]]*$' \
+      "s|^(ARG NIX_IMAGE_DIGEST=)[^[:space:]]+|\\1$2|" \
+      "ARG NIX_IMAGE_DIGEST=$2" \
       "ベースイメージのダイジェスト"
-    echo "docs/setup.md の NIX_VERSION も一致させること (scripts/check-pins.sh が検査します)。"
+    replace_in_transaction docs/setup.md \
+      '^NIX_VERSION=[^[:space:]]+[[:space:]]*$' \
+      "s|^(NIX_VERSION=)[^[:space:]]+|\\1$1|" \
+      "NIX_VERSION=$1" \
+      "Nix インストーラのバージョン"
+    replace_in_transaction docs/setup.md \
+      '^NIX_SHA256=[0-9a-f]{64}[[:space:]]*$' \
+      "s|^(NIX_SHA256=)[^[:space:]]+|\\1$3|" \
+      "NIX_SHA256=$3" \
+      "Nix インストーラの sha256"
+    replace_in_transaction scripts/nix-pin.sh \
+      '^NIX_VERSION=[^[:space:]]+[[:space:]]*$' \
+      "s|^(NIX_VERSION=)[^[:space:]]+|\\1$1|" \
+      "NIX_VERSION=$1" \
+      "導入する Nix のバージョン"
+    replace_in_transaction scripts/nix-pin.sh \
+      '^NIX_SHA256=[0-9a-f]{64}[[:space:]]*$' \
+      "s|^(NIX_SHA256=)[^[:space:]]+|\\1$3|" \
+      "NIX_SHA256=$3" \
+      "導入する Nix の sha256"
+    commit_transaction
     ;;
 
   action)
@@ -207,26 +361,10 @@ case "$target" in
     echo "action のバージョンを示すコメントも併せて更新すること。"
     ;;
 
-  nix-installer)
-    require_args 2 "$#"
-    require_format "$1" '^[0-9][0-9A-Za-z._-]*$' "バージョン"
-    require_format "$2" '^[0-9a-f]{64}$' "64 桁の sha256"
-    replace_in_file docs/setup.md \
-      "s|^NIX_VERSION=.*|NIX_VERSION=$1|" \
-      "Nix インストーラのバージョン"
-    replace_in_file docs/setup.md \
-      "s|^NIX_SHA256=.*|NIX_SHA256=$2|" \
-      "Nix インストーラの sha256"
-    # 導入を行うスクリプト (WSL の Ubuntu 経路、Claude Code のリモート実行環境) は
-    # scripts/nix-pin.sh を参照する。docs/setup.md と食い違うと経路によって異なる版が
-    # 入るため、同時に書き換える (一致は check-pins.sh が検査する)。
-    replace_in_file scripts/nix-pin.sh \
-      "s|^NIX_VERSION=.*|NIX_VERSION=$1|" \
-      "導入する Nix のバージョン"
-    replace_in_file scripts/nix-pin.sh \
-      "s|^NIX_SHA256=.*|NIX_SHA256=$2|" \
-      "導入する Nix の sha256"
-    echo "Dockerfile の ARG NIX_VERSION も一致させること。"
+  image | nix-installer)
+    echo "エラー: $target は個別更新で固定が不整合になるため廃止しました。" >&2
+    echo "nix-release <バージョン> <イメージのダイジェスト> <インストーラの sha256> を使用してください。" >&2
+    exit 1
     ;;
 
   wsl-image)
