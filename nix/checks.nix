@@ -1,7 +1,12 @@
 # `nix flake check` (`make check`) が実行する検査。
 #
 # ローカル、CI、コンテナのいずれでも同一の derivation が実行される。
-{ pkgs, src }:
+{
+  pkgs,
+  src,
+  homeConfigurations,
+  nixosConfigurations,
+}:
 
 let
   # 各検査で共通に使用するヘルパー。検査が成功した場合のみ $out を生成する。
@@ -12,6 +17,41 @@ let
       ${script}
       touch "$out"
     '';
+
+  # 非標準 flake output は nix flake check が自動では評価しない。drvPath を要求して
+  # module と option から最終 derivation までを評価し、その文字列の context は捨てる。
+  # check derivation の依存に対象 output を含めないため、activation package や NixOS
+  # system closure の実 build は行わない。
+  mkEvaluationCheck =
+    name: target:
+    pkgs.runCommandLocal "check-evaluate-${name}"
+      {
+        targetDrvPath = builtins.unsafeDiscardStringContext target.drvPath;
+      }
+      ''
+        case "$targetDrvPath" in
+          /nix/store/*.drv) ;;
+          *)
+            echo "評価結果が derivation path ではありません: $targetDrvPath" >&2
+            exit 1
+            ;;
+        esac
+        printf '%s\n' "$targetDrvPath" > "$out"
+      '';
+
+  # 構成はいずれも x86_64-linux を対象としているため、CI が実行する同 system の
+  # checks にだけ加える。他 system 全体の評価は別の検査で扱う。
+  configurationChecks = pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
+    pkgs.lib.mapAttrs' (
+      name: configuration:
+      pkgs.lib.nameValuePair "evaluate-home-${name}" (
+        mkEvaluationCheck "home-${name}" configuration.activationPackage
+      )
+    ) homeConfigurations
+    // {
+      evaluate-nixos-wsl = mkEvaluationCheck "nixos-wsl" nixosConfigurations.wsl.config.system.build.toplevel;
+    }
+  );
 in
 {
   # Nix コードが nixfmt で整形済みであること。
@@ -122,3 +162,4 @@ in
     shfmt --diff --indent 2 --case-indent scripts/*.sh
   '';
 }
+// configurationChecks

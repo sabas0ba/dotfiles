@@ -28,6 +28,8 @@ CLAUDE.md                Claude Code 向けの補足
 
 `ci.yml` は `make docker-check` を実行する。この target は現在の checkout からイメージを構築し、source を mount で上書きせず、`--network none` のコンテナ内で `make check` を実行する。CI とローカルで同じ target を使い、CI 環境をホストおよびコンテナと別の環境にしない。push (main) と pull request で自動実行する。
 
+`nix flake check` は通常の lint に加え、各 `homeConfigurations` の activation package と `nixosConfigurations.wsl` の system derivation を評価する。構成の derivation path までを契約とし、activation package や NixOS system closure 自体は構築しない。
+
 `pages.yml` は `docs/` を GitHub Pages へ公開する。push (main) と手動実行で配置し、`docs/` を変更する pull request では生成のみを行う (配置はしない)。サイトの生成は GitHub が提供する Jekyll をそのまま使い、リポジトリ側に生成器の依存を持たない。
 
 見た目は外部のテーマに依存せず、`docs/_layouts/default.html` と `docs/assets/css/style.css` で完結させる。テーマは版を固定できず、上流の変更がそのまま公開物に及ぶためである。配色は CSS の変数で定義し、OS の設定 (`prefers-color-scheme`) と利用者の選択 (`data-theme`) の双方で切り替える。
