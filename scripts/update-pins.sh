@@ -344,11 +344,14 @@ case "$target" in
     require_args 2 "$#"
     require_format "$1" '^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$' "owner/repo"
     require_format "$2" '^[0-9a-f]{40}$' "40 桁のコミット SHA"
+    # owner/repo に許可している正規表現メタ文字は `.` だけである。ERE として
+    # 解釈され、別名の action を誤更新しないよう literal に変換する。
+    action_pattern=${1//./\\.}
     updated=0
     while IFS= read -r workflow; do
-      if grep -qE "uses:[[:space:]]*$1@" "$workflow"; then
+      if grep -qE "uses:[[:space:]]*$action_pattern@" "$workflow"; then
         replace_in_file "$workflow" \
-          "s|(uses:[[:space:]]*$1)@[^[:space:]]+|\\1@$2|" \
+          "s|(uses:[[:space:]]*$action_pattern)@[^[:space:]]+|\\1@$2|" \
           "$1 のコミット SHA"
         updated=$((updated + 1))
       fi
