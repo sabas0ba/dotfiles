@@ -139,7 +139,7 @@ in
 
   # WSL bootstrap の checkout は既存 repository を検査し、ref を commit に解決して
   # detached HEAD に固定する。ローカル bare repository の fixture だけで回帰検査する。
-  wsl-repository = mkCheck "wsl-repository" [ pkgs.bashInteractive pkgs.gitMinimal ] ''
+  wsl-repository = mkCheck "wsl-repository" [ pkgs.bashInteractive pkgs.git ] ''
     WSL_REPOSITORY_TEST_TMPDIR="$TMPDIR" bash scripts/test-wsl-repository.sh
   '';
 
