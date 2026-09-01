@@ -157,6 +157,12 @@ in
     done
   '';
 
+  # Setup script が現在の toolchain profile へ更新され、追加・削除されたコマンドの
+  # 管理リンクを利用者の変更と区別しながら収束させること。
+  cloud-toolchain = mkCheck "cloud-toolchain" [ pkgs.bashInteractive pkgs.coreutils ] ''
+    bash scripts/test-cloud-toolchain.sh
+  '';
+
   # シェルスクリプトの静的解析。.envrc も bash として検査する。
   shellcheck = mkCheck "shellcheck" [ pkgs.shellcheck ] ''
     shellcheck scripts/*.sh
