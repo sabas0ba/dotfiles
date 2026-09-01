@@ -34,7 +34,27 @@ dotfiles_install_toolchain_links() {
 
   mkdir -p "$bin_dir" "$(dirname "$manifest")"
 
-  for source in "$profile"/bin/* "$nix_bin"/* "$extra_profile"/bin/*; do
+  # manifest が無い初回実行では、以前の版が manifest なしで張った link が残っている。
+  # profile の更新で指す先を失ったものは、記録に載らないままだと以後も回収されない
+  # ため、管理対象のディレクトリを指す壊れた symlink をここで取り除く。指す先が
+  # 生きている link は、現在の profile の分として後続の配置で張り直される。
+  if [ ! -f "$manifest" ]; then
+    local link_target
+    for target in "$bin_dir"/*; do
+      [ -L "$target" ] || continue
+      [ -e "$target" ] && continue
+      link_target=$(readlink "$target")
+      if [[ $link_target == "$profile"/bin/* ]] ||
+        [[ $link_target == "$extra_profile"/bin/* ]]; then
+        rm -f -- "$target"
+      fi
+    done
+  fi
+
+  # 後の配置元ほど優先される (同名は後から張った symlink と manifest の記録が残る)。
+  local sources=("$profile"/bin/* "$nix_bin"/* "$extra_profile"/bin/*)
+
+  for source in "${sources[@]}"; do
     # 対象が無い場合、glob は展開されずそのまま残る。
     [ -e "$source" ] || continue
 

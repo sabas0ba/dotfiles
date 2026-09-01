@@ -63,6 +63,12 @@ export FAKE_TOOLCHAIN_OUTPUT=$output_one
 mkdir -p "$(dirname "$extra_profile")"
 ln -s "$extra_output" "$extra_profile"
 
+# manifest 導入前の版が張った link の移行。profile の更新で指す先を失ったものは
+# 初回の manifest 実行で取り除き、管理外の壊れた link には触れない。
+mkdir -p "$bin_dir"
+ln -s "$profile/bin/removed-by-upgrade" "$bin_dir/removed-by-upgrade"
+ln -s "$work/unmanaged-missing" "$bin_dir/unmanaged"
+
 dotfiles_update_toolchain_profile repo#default "$profile"
 dotfiles_install_toolchain_links "$profile" "$nix_bin" "$extra_profile" "$bin_dir" "$manifest" >/dev/null
 dotfiles_verify_toolchain_links "$bin_dir" "$manifest"
@@ -71,6 +77,11 @@ dotfiles_verify_toolchain_links "$bin_dir" "$manifest"
 [ "$(readlink "$bin_dir/gamma")" = "$extra_profile/bin/gamma" ]
 [ "$(readlink "$bin_dir/shared")" = "$extra_profile/bin/shared" ]
 [ "$(readlink "$bin_dir/nix")" = "$nix_bin/nix" ]
+if [ -L "$bin_dir/removed-by-upgrade" ]; then
+  echo "manifest 導入前の壊れた管理 link が残っています。" >&2
+  exit 1
+fi
+[ "$(readlink "$bin_dir/unmanaged")" = "$work/unmanaged-missing" ]
 
 # 利用者が差し替えたリンクは、profile からコマンドが消えても削除しない。
 ln -sfn "$user_bin/alpha" "$bin_dir/alpha"
