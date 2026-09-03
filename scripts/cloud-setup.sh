@@ -203,6 +203,8 @@ repo=$(cd "$script_dir/.." && pwd)
 . "$script_dir/nix-pin.sh"
 # shellcheck source=scripts/cloud-home.sh
 . "$script_dir/cloud-home.sh"
+# shellcheck source=scripts/cloud-toolchain.sh
+. "$script_dir/cloud-toolchain.sh"
 # shellcheck source=scripts/pinned-download.sh
 . "$script_dir/pinned-download.sh"
 
@@ -216,6 +218,18 @@ readonly DOTFILES_PROFILE=/nix/var/nix/profiles/dotfiles-dev
 # に限るものであるため、そこへ混ぜず別の profile に置く。どちらの経路で入ったツールかが
 # 実行時にも区別できる。
 readonly DOTFILES_EXTRA_PROFILE=/nix/var/nix/profiles/dotfiles-extra
+
+# flake が公開する devShell/package の名前。既定は従来どおり default とし、追加の
+# profile を公開するリビジョンでは Setup script の環境変数から選択できるようにする。
+DOTFILES_TOOLCHAIN_PROFILE=${DOTFILES_TOOLCHAIN_PROFILE:-default}
+case "$DOTFILES_TOOLCHAIN_PROFILE" in
+  *[!a-zA-Z0-9_-]* | "")
+    echo "エラー: DOTFILES_TOOLCHAIN_PROFILE が不正です: $DOTFILES_TOOLCHAIN_PROFILE" >&2
+    exit 1
+    ;;
+esac
+readonly DOTFILES_TOOLCHAIN_PROFILE
+readonly DOTFILES_TOOLCHAIN_REF="$repo#$DOTFILES_TOOLCHAIN_PROFILE"
 
 # 当該環境は USER を設定しない。Nix の profile スクリプトは HOME と USER の両方が
 # ある場合にしか PATH を設定せず、home-manager の activation script も USER を参照する
@@ -252,6 +266,7 @@ readonly LOGGED_ENV=(
   CLAUDE_ENV_FILE
   CODEX_HOME
   DOTFILES_EXTRA_PACKAGES
+  DOTFILES_TOOLCHAIN_PROFILE
   HOME
   USER
 )
@@ -658,31 +673,23 @@ show_revision() {
 # 実際に覆ったものを実行時にも示す。
 install_toolchain() {
   local profile=/nix/var/nix/profiles/dotfiles-toolchain
-  local dir source target name existing stale
-  local count=0
-  local shadowed=()
+  local manifest=/nix/var/nix/profiles/dotfiles-toolchain-links
+  local previous current result count shadowed
 
-  # 既にある profile は作り直さない。ただし checkout が入れ替わっていた場合、配置する
-  # ツールは以前のリビジョンのものであり、記録の dotfiles の行とは一致しない。どちらで
-  # あったかと、実体がどの store のパスかを記録に残す。store のパスは内容を一意に定める
-  # ため、2 つの実行が同じツールを配置したかどうかはこれで判別できる。
-  if [ -e "$profile" ]; then
-    note "ツールの profile は既にある ($profile)"
-    toolchain_origin="再利用 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
+  previous=$(readlink -f "$profile" 2>/dev/null || true)
+  dotfiles_update_toolchain_profile "$DOTFILES_TOOLCHAIN_REF" "$profile"
+  current=$(readlink -f "$profile")
+
+  if [ -n "$previous" ] && [ "$previous" = "$current" ]; then
+    note "ツールの profile は現在の構成と一致する ($profile -> $current)"
+    toolchain_origin="一致 $current"
+  elif [ -n "$previous" ]; then
+    note "ツールの profile を更新した ($previous -> $current)"
+    toolchain_origin="更新 $previous -> $current"
   else
-    nix profile install --profile "$profile" "$repo#default"
-    note "ツールを profile として実体化した ($profile)"
-    toolchain_origin="実体化 $(readlink -f "$profile" 2>/dev/null || printf '(解決できない)')"
+    note "ツールを profile として実体化した ($profile -> $current)"
+    toolchain_origin="実体化 $current"
   fi
-
-  # profile が空でないことを、配置する前に確かめる。配置の総数で見ると、nix 自身や
-  # 追加パッケージの分で 0 にならず、ツールが入っていないことを見落とす。
-  if ! compgen -G "$profile/bin/*" >/dev/null; then
-    echo "エラー: $profile/bin にコマンドがありません。" >&2
-    exit 1
-  fi
-
-  mkdir -p /usr/local/bin
 
   # nix 自身も対象に含める。他のリポジトリのセッションでも nix develop や nix shell を
   # 使えるようにするため。
@@ -713,67 +720,24 @@ install_toolchain() {
     exit 1
   fi
 
-  # 追加パッケージは最後に置く。同名がある場合は後から張った symlink が残るため、
-  # フックの経路で PATH の先頭に足すのと同じ優先順位になる。
-  local dirs=("$profile/bin" "$nix_bin" "$DOTFILES_EXTRA_PROFILE/bin")
-
-  for dir in "${dirs[@]}"; do
-    for source in "$dir"/*; do
-      # 対象が無い場合、glob は展開されずそのまま残る。
-      [ -e "$source" ] || continue
-
-      name=$(basename "$source")
-      target=/usr/local/bin/$name
-
-      # 配置元と配置先が同じものは飛ばす。自分自身へ張り直すと symlink が自己参照になり、
-      # 元の指し先を失う。上の nix_bin の解決で起こらないようにしてあるが、配置元が増えた
-      # ときにも同じ壊れ方をしないよう、ここでも守る。
-      if [ "$source" = "$target" ]; then
-        continue
-      fi
-
-      # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
-      # symlink (/usr/local/bin) と Nix の実体は対象から除く。
-      existing=$(command -v "$name" 2>/dev/null || true)
-      case "$existing" in
-        "" | /usr/local/bin/* | /nix/*) ;;
-        *) shadowed+=("$name") ;;
-      esac
-
-      ln -sfn "$source" "$target"
-      count=$((count + 1))
-    done
-  done
-
-  # 追加パッケージを指定から外すと、前回張った symlink の指す先が profile から消える。
-  # 壊れた symlink が残ると command -v では見つかるのに実行が失敗するため、追加パッケージ
-  # の profile を指していて実体を失ったものを取り除く。配置の後に行う。この時点で
-  # 実体を持たないものが、指定から外れたものである。
-  stale=0
-  for target in /usr/local/bin/*; do
-    # symlink であり、かつ指す先を失っているものだけを対象とする。実体のあるファイルと、
-    # 解決できている symlink は残す。
-    if [ ! -L "$target" ] || [ -e "$target" ]; then
-      continue
-    fi
-
-    case "$(readlink "$target")" in
-      "$DOTFILES_EXTRA_PROFILE"/*)
-        rm -f "$target"
-        stale=$((stale + 1))
-        ;;
-    esac
-  done
+  # 追加パッケージは最後に処理する。同名のコマンドは追加 profile のものを配置し、
+  # フック経路で PATH の先頭に足す場合と同じ優先順位にする。
+  result=$(dotfiles_install_toolchain_links \
+    "$profile" "$nix_bin" "$DOTFILES_EXTRA_PROFILE" \
+    /usr/local/bin "$manifest")
+  count=${result%%$'\n'*}
+  shadowed=
+  case "$result" in
+    *$'\nshadowed: '*) shadowed=${result#*$'\nshadowed: '} ;;
+  esac
 
   note "/usr/local/bin へ配置した ($count 件)"
 
-  if [ "$stale" -ne 0 ]; then
-    note "指定から外れた追加パッケージの symlink を取り除いた ($stale 件)"
+  if [ -n "$shadowed" ]; then
+    note "system の同名のコマンドを覆った: $shadowed"
   fi
 
-  if [ "${#shadowed[@]}" -ne 0 ]; then
-    note "system の同名のコマンドを覆った (${#shadowed[@]} 件): ${shadowed[*]}"
-  fi
+  dotfiles_verify_toolchain_links /usr/local/bin "$manifest"
 }
 
 # home/ 以下をホームディレクトリの構造に対応させて配置する。
@@ -837,7 +801,19 @@ else
 fi
 
 step "環境を検査する"
-nix develop "$DOTFILES_PROFILE" --command "$repo/scripts/check-env.sh"
+if [ "$mode" = hook ]; then
+  nix develop "$DOTFILES_PROFILE" --command "$repo/scripts/check-env.sh"
+else
+  # Setup script の後に agent が使う経路だけを PATH に残す。nix develop 内で検査すると、
+  # /usr/local/bin のリンクが古い、または壊れていても開発シェル側のコマンドで通る。
+  env_bin=$(command -v env)
+  "$env_bin" -i \
+    HOME="$HOME" \
+    USER="$USER" \
+    PATH=/usr/local/bin \
+    NIX_STORE_DIR="${NIX_STORE_DIR:-/nix/store}" \
+    "$repo/scripts/check-env.sh"
+fi
 
 # 追加パッケージの失敗は、構成を最後まで進めてから報告する。ここで途中で止めると、
 # 名前を 1 つ誤っただけで開発シェルの引き渡しごと失われ、セッションが構成前の状態に
