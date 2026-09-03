@@ -58,7 +58,7 @@ export PATH="$out/bin:$PATH"
 ホームディレクトリの内容は home-manager で宣言的に管理する。管理対象は 2 種類ある。
 
 - 設定の生成: [`nix/home.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/home.nix) の `programs.git` 等。git の user/email もここで設定する
-- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する (`home/.claude/CLAUDE.md` → `~/.claude/CLAUDE.md`、`home/.codex/AGENTS.md` → `~/.codex/AGENTS.md`)
+- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する (`home/.codex/AGENTS.md` → `~/.codex/AGENTS.md`、`home/.claude/CLAUDE.md` → `~/.claude/CLAUDE.md`)
 
 既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
 
@@ -88,15 +88,15 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 `home/.claude` は `recursive = true` で配置する。ディレクトリごとではなく配下のファイルを個別に symlink するため、`~/.claude` に管理外のファイルがあっても置き換えない。
 
-`home/.claude/settings.json` は permission の既定値で、認証情報を含むファイルの読み出しと認証済み CLI の実行をそれぞれ deny / ask に置く。方針は `home/.claude/CLAUDE.md` の「実行環境と到達範囲」にある。
+`home/.claude/settings.json` は permission の既定値で、認証情報を含むファイルの読み出しと認証済み CLI の実行をそれぞれ deny / ask に置く。方針の原本は `home/.codex/AGENTS.md` の「実行環境と到達範囲」にある。
 
 これは Claude Code がツール実行前に行う検査であって OS レベルの強制ではなく、Bash から起動した子プロセスには及ばない。WSL では[隔離](windows.md#windows-側からの隔離)を主たる担保とし、本設定はそれが使えない環境 (Windows ネイティブ、Linux ホスト) 向けの補助である。
 
 配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を使う (プロジェクトの設定が優先される)。
 
-### Codex の設定
+### Agent の作業規約
 
-`home/.codex/AGENTS.md` は Codex がリポジトリをまたいで参照する入口であり、利用者共通の作業規約である `~/.claude/CLAUDE.md` を参照する。規約を複製せず、Claude Code と Codex の内容を一致させる。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
+`home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が同じ規約を参照するための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
 
 `home/.codex` もファイル単位で配置するため、Codex が同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む `config.toml` は本リポジトリでは配布しない。
 
