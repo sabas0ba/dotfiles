@@ -39,7 +39,7 @@
 
 ## 実行環境と到達範囲
 
-使い捨ての managed cloud 環境以外では、利用者の資産と認証済み tool が存在するため、次を守る。
+実行環境が一時的かどうかにかかわらず、利用者の資産、認証情報、認証済み tool のいずれかに到達できる場合は次を守る。Claude Code の隔離済み使い捨て VM など、これらへ到達できないことを確認した環境だけを対象外とする。
 
 - 作業対象はリポジトリ配下に限定する。リポジトリ外のファイル、system 設定、他 project に触れる場合は、目的と対象を示して許可を得る。
 - 認証情報を保持する tool を無断で使わない。対象には `gh`、`az`、`aws`、`gcloud`、`kubectl`、`docker`、`ssh`、git credential helper、browser profile、password manager CLI を含む。
