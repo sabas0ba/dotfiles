@@ -88,7 +88,7 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 `home/.claude` は `recursive = true` で配置する。ディレクトリごとではなく配下のファイルを個別に symlink するため、`~/.claude` に管理外のファイルがあっても置き換えない。
 
-`home/.claude/settings.json` は permission の既定値で、認証情報を含むファイルの読み出しと認証済み CLI の実行をそれぞれ deny / ask に置く。方針の原本は `home/.codex/AGENTS.md` の「実行環境と到達範囲」にある。
+`home/.claude/settings.json` は permission の既定値で、認証情報を含むファイルの読み出しと認証済み CLI の実行をそれぞれ deny / ask に置く。対象とする操作の共通方針は `home/.codex/AGENTS.md` の「実行環境と到達範囲」、Claude Code 固有の制約は `home/.claude/CLAUDE.md` にある。
 
 これは Claude Code がツール実行前に行う検査であって OS レベルの強制ではなく、Bash から起動した子プロセスには及ばない。WSL では[隔離](windows.md#windows-側からの隔離)を主たる担保とし、本設定はそれが使えない環境 (Windows ネイティブ、Linux ホスト) 向けの補助である。
 
@@ -96,7 +96,7 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 ### Agent の作業規約
 
-`home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が同じ規約を参照するための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
+`home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
 
 `home/.codex` もファイル単位で配置するため、Codex が同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む `config.toml` は本リポジトリでは配布しない。
 

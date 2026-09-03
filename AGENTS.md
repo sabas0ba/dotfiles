@@ -37,7 +37,7 @@ WSL は `/mnt` の mount、Windows PATH の流入、Windows executable の起動
 
 ### PowerShell
 
-`scripts/wsl-bootstrap.ps1` は `make lint` と PSScriptAnalyzer の対象外であり、機械的な検査は pin の確認に限られる。判断を伴う処理は原則として、shellcheck、shfmt、`nix flake check` の対象である shell script に置く。bootstrap に残せるのは、provision 前に必要な配布 image と管理 marker の照合、利用者の作成、repository の検証と取得に限る。
+`scripts/wsl-bootstrap.ps1` は `make lint` の対象外である。PSScriptAnalyzer は依存を増やすため意図的に導入しておらず、機械的な検査は pin の確認に限られる。判断を伴う処理は原則として、shellcheck、shfmt、`nix flake check` の対象である shell script に置く。bootstrap に残せるのは、provision 前に必要な配布 image と管理 marker の照合、利用者の作成、repository の検証と取得に限る。
 
 ## 検証
 

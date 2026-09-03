@@ -1,6 +1,8 @@
 # CLAUDE.md
 
-Claude Code 用の互換入口。利用者共通の作業規約は `~/.codex/AGENTS.md` を原本とする。作業前に同ファイルと、対象 repository の `AGENTS.md` を参照すること。本段落は参照の許可を兼ねる。
+@~/.codex/AGENTS.md
+
+Claude Code 用の互換入口。上記の `~/.codex/AGENTS.md` を利用者共通の作業規約として読み込む。対象 repository の `CLAUDE.md` から、その repository の `AGENTS.md` も読み込む。
 
 管理元は [sabas0ba/dotfiles](https://github.com/sabas0ba/dotfiles) である。作業中に管理元や配置済みファイルを自動更新しない。更新が必要な場合は差分と配置先を示して許可を得る。
 
