@@ -1,6 +1,6 @@
 # 開発
 
-本ページが本リポジトリの規約の所在である。Claude Code に対する指示 (`CLAUDE.md`) もここを参照する。人間の作業者にも同様に適用する。
+本ページが本リポジトリの開発規約の原本であり、人間と coding agent の双方に適用する。agent 向けの入口は `AGENTS.md`、Claude Code の互換入口は `CLAUDE.md` とする。
 
 ## 構成
 
@@ -20,7 +20,8 @@ home/                    ホームディレクトリへ配置する生ファイ�
 docs/                    本ドキュメント (GitHub Pages で公開する)
 .github/workflows/       CI と Pages の定義
 .claude/settings.json    Claude Code のフック定義 (クラウド環境の構成)
-CLAUDE.md                Claude Code 向けの補足
+AGENTS.md                coding agent 向けのリポジトリ固有指示
+CLAUDE.md                AGENTS.md を参照する Claude Code 互換入口
 .work/                   作業用の一時ファイル置き場 (git ignore 対象)
 ```
 
