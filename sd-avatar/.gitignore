@@ -1,0 +1,20 @@
+# direnv および nix-direnv のキャッシュ
+.direnv/
+
+# nix build の成果物 symlink
+result
+result-*
+
+# 生成物 (.blend, FBX, texture, render)。make build / make render で再生成する
+/build/
+
+# 作業用の一時ファイル置き場
+/.work/
+
+# Python
+__pycache__/
+*.pyc
+.ruff_cache/
+
+# Blender の自動保存
+*.blend1
