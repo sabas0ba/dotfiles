@@ -18,6 +18,7 @@ Makefile                 操作の入り口
 scripts/                 ヘルパースクリプト
 home/                    ホームディレクトリへ配置する生ファイル
 docs/                    本ドキュメント (GitHub Pages で公開する)
+projects/                用途別 profile を使う project の暫定置き場 (独立リポジトリへ移設する)
 .github/workflows/       CI と Pages の定義
 .claude/settings.json    Claude Code のフック定義 (クラウド環境の構成)
 AGENTS.md                coding agent 向けのリポジトリ固有指示

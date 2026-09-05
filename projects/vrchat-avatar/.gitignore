@@ -1,0 +1,9 @@
+# 生成物。make build / make preview の出力
+/build/
+
+# Python の bytecode
+__pycache__/
+*.pyc
+
+# Blender の自動保存
+*.blend1
