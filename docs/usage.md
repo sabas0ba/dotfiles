@@ -18,7 +18,7 @@ make shell         # 開発シェルに入る (direnv 未使用時)
 
 ## Toolchain profile
 
-既定の `nix develop` と direnv は、dotfiles の保守に必要な `default` profile だけを導入する。容量の大きいコンパイラ、コンテナ、HDL、browser は用途別 profile を明示して取得する。
+既定の `nix develop` と direnv は、dotfiles の保守に必要な `default` profile だけを導入する。容量の大きいコンパイラ、コンテナ、HDL、browser、Blender は用途別 profile を明示して取得する。
 
 | Profile | 主な内容 | 対応 platform |
 | --- | --- | --- |
@@ -27,6 +27,7 @@ make shell         # 開発シェルに入る (direnv 未使用時)
 | `containers` | Docker CLI、Podman、QEMU | Linux / Darwin。Podman は Linux のみ |
 | `hdl` | Veryl、Verible、Verilator、native C/C++ | Linux / Darwin。Verible は Linux のみ |
 | `browser` | TypeScript、Playwright と Chromium/Firefox/WebKit | Linux のみ |
+| `vrchat` | Blender (headless 実行と FBX export) | Linux / Darwin |
 | `full` | 現在の platform で利用可能な上記すべて | Linux / Darwin |
 
 開発シェルと通常の Nix package は同じ profile 名を使う。
@@ -50,6 +51,8 @@ export PATH="$out/bin:$PATH"
 ```
 
 プロジェクト側で `@playwright/test` または `playwright` を依存に持つ場合、その version は `nix/packages.nix` が固定する `playwright-driver.browsers` と一致させる。version が異なる browser を実行時に download しない。
+
+`vrchat` は Blender を headless (`blender -b --python`) で使う前提であり、GUI の起動は host 側の display と GPU に依存する。利用例は `projects/vrchat-avatar/` を参照する。
 
 `containers` は CLI と仮想化 tool を提供するだけである。Docker daemon、Podman の user namespace、QEMU/KVM などの権限と system service はホスト側で構成する。
 
