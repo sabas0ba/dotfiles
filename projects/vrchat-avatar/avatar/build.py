@@ -53,6 +53,12 @@ def triangle_count(obj) -> int:
     return sum(len(poly.vertices) - 2 for poly in obj.data.polygons)
 
 
+def geometry_height(obj) -> float:
+    """mesh の実寸の高さ (z の範囲)。report には params ではなく生成物の値を記録する。"""
+    zs = [v.co.z for v in obj.data.vertices]
+    return round(max(zs) - min(zs), 4)
+
+
 def export_fbx(path: Path) -> None:
     import bpy
 
@@ -102,7 +108,8 @@ def build(spec: AvatarSpec, out_dir: Path) -> dict:
     report = {
         "fbx": str(fbx_path),
         "blend": str(blend_path),
-        "height_m": spec.proportions.height,
+        "height_m": geometry_height(body),
+        "height_param_m": spec.proportions.height,
         "subdivision_levels": spec.resolution.subdivision_levels,
         "bones": len(all_bones(spec.proportions)),
         "meshes": {

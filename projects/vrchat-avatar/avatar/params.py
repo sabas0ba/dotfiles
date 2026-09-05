@@ -13,9 +13,7 @@ from dataclasses import dataclass, field
 
 @dataclass(frozen=True)
 class Proportions:
-    height: float = 1.68
-
-    # 頭部。上端が身長、顎先が head_bottom。
+    # 頭部。上端 (head_top) が身長であり、顎先が head_bottom。
     head_top: float = 1.68
     head_bottom: float = 1.445
     head_width: float = 0.165  # 最大幅の半径 (x)
@@ -93,6 +91,11 @@ class Proportions:
     hair_wave: float = 0.012
     bangs_bottom: float = 1.572
     face_opening_deg: float = 62.0
+
+    @property
+    def height(self) -> float:
+        """身長。頭頂の高さと同一であり、独立した値を持たせて geometry と食い違わせない。"""
+        return self.head_top
 
 
 @dataclass(frozen=True)
