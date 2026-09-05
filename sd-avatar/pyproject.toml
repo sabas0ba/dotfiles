@@ -1,0 +1,13 @@
+[project]
+name = "sd-avatar"
+version = "0.1.0"
+description = "SD 頭身キャラクターの VRChat 向け 3D model を Blender script で生成する"
+requires-python = ">=3.13"
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+extend-exclude = ["build", ".work"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "N"]
