@@ -282,6 +282,16 @@ let
         systems = linuxSystems;
       })
     ];
+
+    cg = [
+      # 3D モデルの生成と FBX export を headless (`blender -b --python`) で行う。
+      # Blender は Python interpreter を同梱するため、python group には依存しない。
+      # closure が大きい (約 3.7 GiB) ため、vrchat/full にだけ含める。
+      (mkTool {
+        package = pkgs.blender;
+        commands = [ "blender" ];
+      })
+    ];
   };
 
   profileDefinitions = {
@@ -325,6 +335,13 @@ let
       available = playwrightAvailable;
       systems = linuxSystems;
     };
+    vrchat = {
+      description = "VRChat 向け 3D モデル制作 (Blender headless)";
+      groups = [
+        "base"
+        "cg"
+      ];
+    };
     full = {
       description = "利用可能な全 toolchain";
       groups = [
@@ -337,6 +354,7 @@ let
         "containers"
         "hdl"
         "browser"
+        "cg"
       ];
     };
   };
