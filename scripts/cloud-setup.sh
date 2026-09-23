@@ -766,8 +766,9 @@ install_home() {
 # etc/ 以下を /etc へ配置する。
 #
 # Codex の telemetry 設定 (etc/codex/config.toml) は user 層に置くと Codex 自身の
-# 書き込みと衝突するため、system 層へ置く。setup-script 経路は root で実行され、
-# 使い捨ての VM が対象であるため /etc へ書き込む。
+# 書き込みと衝突するため、system 層へ置く。既存の system config がある場合は
+# cloud-home.sh 側で管理外 key を保持して overlay する。setup-script 経路は root で
+# 実行され、使い捨ての VM が対象であるため /etc へ書き込む。
 install_etc() {
   dotfiles_install_etc "$repo" /etc
 }
