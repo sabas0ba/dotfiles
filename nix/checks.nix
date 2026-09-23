@@ -148,7 +148,12 @@ in
 
   # Cloud Setup の home/ と etc/ の配置先、CODEX_HOME の fallback、backup の一回性。
   # source は読み取り専用の store にあるため、書き込み先を明示して渡す。
-  cloud-home = mkCheck "cloud-home" [ pkgs.bashInteractive pkgs.coreutils pkgs.findutils ] ''
+  cloud-home = mkCheck "cloud-home" [
+    pkgs.bashInteractive
+    pkgs.coreutils
+    pkgs.findutils
+    pkgs.yq-go
+  ] ''
     CLOUD_HOME_TEST_TMPDIR="$TMPDIR" bash scripts/test-cloud-home.sh
   '';
 
