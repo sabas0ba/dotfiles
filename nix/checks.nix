@@ -18,6 +18,9 @@ let
       touch "$out"
     '';
 
+  # 生ファイルに複製した telemetry の環境変数と比較する期待値。
+  telemetryJson = pkgs.writeText "telemetry-env.json" (builtins.toJSON (import ./telemetry.nix));
+
   # 非標準 flake output は nix flake check が自動では評価しない。drvPath を要求して
   # module と option から最終 derivation までを評価し、その文字列の context は捨てる。
   # check derivation の依存に対象 output を含めないため、activation package や NixOS
@@ -157,30 +160,35 @@ in
     done
   '';
 
-  # home/.claude/settings.json の env が nix/telemetry.nix と一致すること。
+  # 2 つの settings.json の env が nix/telemetry.nix と一致すること。
   # settings.json は生ファイルとして配置するため値を複製しており、片方だけの変更を検出する。
   # env は現状 telemetry の無効化のみに使うため、部分一致ではなく完全一致で比較する。
-  telemetry-env =
-    let
-      expected = pkgs.writeText "telemetry-env.json" (builtins.toJSON (import ./telemetry.nix));
-    in
-    mkCheck "telemetry-env" [ pkgs.jq ] ''
-      if ! jq -e --slurpfile expected ${expected} '.env == $expected[0]' \
-        home/.claude/settings.json >/dev/null; then
-        echo "home/.claude/settings.json の env が nix/telemetry.nix と一致しません。" >&2
+  telemetry-env = mkCheck "telemetry-env" [ pkgs.jq ] ''
+    for settings in .claude/settings.json home/.claude/settings.json; do
+      if ! jq -e --slurpfile expected ${telemetryJson} '.env == $expected[0]' \
+        "$settings" >/dev/null; then
+        echo "$settings の env が nix/telemetry.nix と一致しません。" >&2
         exit 1
       fi
-    '';
+    done
+  '';
 
   # etc/codex/config.toml が TOML として読め、telemetry を無効化する値を持つこと。
   # Codex は未知の値や壊れた TOML で起動に失敗するため、配置前に検出する。
-  codex-telemetry = mkCheck "codex-telemetry" [ pkgs.yq-go ] ''
+  # shell_environment_policy.set は nix/telemetry.nix の複製であり、一致も検査する。
+  codex-telemetry = mkCheck "codex-telemetry" [ pkgs.yq-go pkgs.jq ] ''
     if ! yq -p toml -o yaml -e '
       .analytics.enabled == false and
       .feedback.enabled == false and
       .otel.metrics_exporter == "none"
     ' etc/codex/config.toml >/dev/null; then
       echo "etc/codex/config.toml が telemetry を無効化していません。" >&2
+      exit 1
+    fi
+
+    if ! yq -p toml -o json '.shell_environment_policy.set' etc/codex/config.toml |
+      jq -e --slurpfile expected ${telemetryJson} '. == $expected[0]' >/dev/null; then
+      echo "etc/codex/config.toml の shell_environment_policy.set が nix/telemetry.nix と一致しません。" >&2
       exit 1
     fi
   '';

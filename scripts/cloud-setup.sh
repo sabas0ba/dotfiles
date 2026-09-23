@@ -634,6 +634,11 @@ write_env_file() {
       for name in PATH USER DOTFILES_ENV DOTFILES_ROOT LC_ALL; do
         printf "export %s=%q\n" "$name" "${!name}"
       done
+
+      # profile の環境 (nix/telemetry.nix の telemetry の無効化を含む) も渡す。
+      # 名前を上に列挙すると nix/telemetry.nix と二重管理になるため、flake.nix が
+      # 生成した export 行の定義をそのまま使う。
+      cat "$DOTFILES_PROFILE_ENV"
     ' bash "$extra_bin" | grep '^export ' || true
   )
 

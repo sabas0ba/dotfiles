@@ -107,12 +107,15 @@ Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およ�
 
 | 経路 | 反映先 |
 | --- | --- |
-| `home/.claude/settings.json` の `env` | Claude Code 本体と、その Bash tool から起動する子プロセス。シェルを経由しない起動 (IDE 拡張等) も含む |
+| `home/.claude/settings.json` と `.claude/settings.json` の `env` | Claude Code 本体と、その Bash tool から起動する子プロセス。シェルを経由しない起動 (IDE 拡張等) も含む |
 | `nix/home.nix` の `home.sessionVariables` | `hm-session-vars.sh` を読み込むシェル |
 | `nix/wsl.nix` の `environment.sessionVariables` | WSL 上の NixOS の全ユーザーのログインシェル |
 | 開発シェルと profile の環境 | `nix develop`、direnv、Docker image (entrypoint が開発シェルに入る)、`dotfiles-toolchain-info environment` |
 
-クラウド環境の Bash へは `scripts/cloud-setup.sh` が開発シェルの一部の変数だけを引き渡すため、上記の開発シェルの経路は及ばない。setup script 経路では同スクリプトが配置する `~/.claude/settings.json` の `env` が適用される。フック経路は `home/` を配置しないため対象外である。
+クラウド環境では経路ごとに次が適用される。
+
+- Claude Code のフック経路 (本リポジトリ): `.claude/settings.json` の `env` が Claude Code の起動時に読まれる。`scripts/cloud-setup.sh` は profile の環境を `$CLAUDE_ENV_FILE` へ書き、Bash tool にも渡す
+- setup script 経路: 同スクリプトが配置する `~/.claude/settings.json` の `env` が Claude Code に、`/etc/codex/config.toml` の `shell_environment_policy.set` が Codex の実行するコマンドに適用される。setup script はセッションのシェルへ環境変数を渡せないため、Codex 側はこの設定で与える
 
 | 変数 | 値 | 対象 |
 | --- | --- | --- |
@@ -125,7 +128,7 @@ Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およ�
 | `COPILOT_OFFLINE` | `true` | GitHub Copilot CLI の offline mode。telemetry を含め GitHub へ接続しない |
 | `DO_NOT_TRACK` | `1` | 慣習的な opt-out。gh と Claude Code が参照する |
 
-`settings.json` は生ファイルのため値を複製している。一致は `make check` の `telemetry-env` が検査する。
+`settings.json` と `etc/codex/config.toml` は生ファイルのため値を複製している。一致は `make check` の `telemetry-env` と `codex-telemetry` が検査する。
 
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` と `DISABLE_TELEMETRY` は `0` や `false` でも有効になる。戻す場合は変数ごと削除する。
 
