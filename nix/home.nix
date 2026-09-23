@@ -20,6 +20,7 @@
     #
     # home-manager がシェルを管理しない本構成では hm-session-vars.sh を読み込む
     # シェルにのみ反映される。WSL 上の NixOS は nix/wsl.nix が system 側でも設定する。
+    # 他のホストで既存のシェルから読み込む手順は docs/usage.md の「Telemetry の無効化」に置く。
     sessionVariables = import ./telemetry.nix;
 
     # home/ 以下をホームディレクトリの構造に対応させる。

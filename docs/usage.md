@@ -112,6 +112,16 @@ Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およ�
 | `nix/wsl.nix` の `environment.sessionVariables` | WSL 上の NixOS の全ユーザーのログインシェル |
 | 開発シェルと profile の環境 | `nix develop`、direnv、Docker image (entrypoint が開発シェルに入る)、`dotfiles-toolchain-info environment` |
 
+本構成は home-manager にシェルの設定ファイル (`~/.bashrc` 等) を管理させていないため、WSL 上の NixOS 以外のホストでは `make hm-switch` だけでは通常のシェルに `home.sessionVariables` が反映されない。当該ホストでは、既存のシェルの設定ファイル (bash では `~/.profile` または `~/.bashrc`) に次を追記する。
+
+```bash
+if [ -f "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh" ]; then
+  . "$HOME/.nix-profile/etc/profile.d/hm-session-vars.sh"
+fi
+```
+
+`hm-session-vars.sh` は一度読み込むと再読み込みを抑止する変数を設定するため、`nix/telemetry.nix` を変更した後は新しいログインシェルで反映を確認する。
+
 クラウド環境では経路ごとに次が適用される。
 
 - Claude Code のフック経路 (本リポジトリ): `.claude/settings.json` の `env` が Claude Code の起動時に読まれる。`scripts/cloud-setup.sh` は profile の環境を `$CLAUDE_ENV_FILE` へ書き、Bash tool にも渡す
