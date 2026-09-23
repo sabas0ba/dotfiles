@@ -49,6 +49,12 @@
     "flakes"
   ];
 
+  # telemetry とデータ収集の無効化 (一覧は nix/telemetry.nix)。
+  #
+  # home-manager の sessionVariables はシェルが hm-session-vars.sh を読み込む場合に
+  # 限られるため、system 側でも設定し、全ユーザーのログインシェルに反映する。
+  environment.sessionVariables = import ./telemetry.nix;
+
   # リポジトリの取得と direnv の利用に要るもののみ。他は開発シェルから取得する。
   environment.systemPackages = [
     pkgs.git

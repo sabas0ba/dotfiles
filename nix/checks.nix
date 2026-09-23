@@ -157,6 +157,21 @@ in
     done
   '';
 
+  # home/.claude/settings.json の env が nix/telemetry.nix と一致すること。
+  # settings.json は生ファイルとして配置するため値を複製しており、片方だけの変更を検出する。
+  # env は現状 telemetry の無効化のみに使うため、部分一致ではなく完全一致で比較する。
+  telemetry-env =
+    let
+      expected = pkgs.writeText "telemetry-env.json" (builtins.toJSON (import ./telemetry.nix));
+    in
+    mkCheck "telemetry-env" [ pkgs.jq ] ''
+      if ! jq -e --slurpfile expected ${expected} '.env == $expected[0]' \
+        home/.claude/settings.json >/dev/null; then
+        echo "home/.claude/settings.json の env が nix/telemetry.nix と一致しません。" >&2
+        exit 1
+      fi
+    '';
+
   # Setup script が現在の toolchain profile へ更新され、追加・削除されたコマンドの
   # 管理リンクを利用者の変更と区別しながら収束させること。
   cloud-toolchain = mkCheck "cloud-toolchain" [ pkgs.bashInteractive pkgs.coreutils ] ''

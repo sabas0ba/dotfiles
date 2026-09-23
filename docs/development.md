@@ -12,6 +12,7 @@ nix/devshell.nix         開発シェルの定義
 nix/checks.nix           nix flake check が実行する検査
 nix/home.nix             home-manager によるホームディレクトリの構成
 nix/wsl.nix              WSL 上の NixOS の system 構成 (Windows 側からの隔離を含む)
+nix/telemetry.nix        telemetry を無効化する環境変数 (単一情報源)
 .envrc                   direnv の設定
 Dockerfile               同一の flake からコンテナを構築する
 Makefile                 操作の入り口

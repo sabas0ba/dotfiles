@@ -9,6 +9,7 @@
   profile,
   profileEnvironment,
   profileName,
+  toolchainEnv,
 }:
 
 pkgs.mkShellNoCC {
@@ -16,7 +17,8 @@ pkgs.mkShellNoCC {
 
   packages = profile.packages ++ metadataPackages;
 
-  env = profile.env // {
+  # toolchainEnv は profile 固有の値と nix/telemetry.nix を合成したもの。
+  env = toolchainEnv // {
     # 開発シェル内であることをスクリプトから判定するために使用する。
     DOTFILES_ENV = "nix-develop";
 

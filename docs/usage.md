@@ -97,6 +97,34 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を使う (プロジェクトの設定が優先される)。
 
+### Telemetry の無効化
+
+Claude Code と GitHub CLI の telemetry およびデータ収集を環境変数で無効化する。一覧は [`nix/telemetry.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/telemetry.nix) が単一情報源であり、次の経路に反映する。
+
+| 経路 | 反映先 |
+| --- | --- |
+| `home/.claude/settings.json` の `env` | Claude Code 本体と、その Bash tool から起動する子プロセス。シェルを経由しない起動 (IDE 拡張等) も含む |
+| `nix/home.nix` の `home.sessionVariables` | `hm-session-vars.sh` を読み込むシェル |
+| `nix/wsl.nix` の `environment.sessionVariables` | WSL 上の NixOS の全ユーザーのログインシェル |
+| 開発シェルと profile の環境 | `nix develop`、direnv、Docker image (entrypoint が開発シェルに入る)、`dotfiles-toolchain-info environment` |
+
+クラウド環境の Bash へは `scripts/cloud-setup.sh` が開発シェルの一部の変数だけを引き渡すため、上記の開発シェルの経路は及ばない。同スクリプトが配置する `~/.claude/settings.json` の `env` が適用される。
+
+| 変数 | 値 | 対象 |
+| --- | --- | --- |
+| `DISABLE_TELEMETRY` | `1` | Claude Code の利用状況 metrics |
+| `DISABLE_ERROR_REPORTING` | `1` | Claude Code のエラー報告 |
+| `DISABLE_FEEDBACK_COMMAND` | `1` | Claude Code の `/feedback`、`/bug`、`/share` |
+| `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` | `1` | Claude Code のセッション品質 survey と transcript 共有の確認 |
+| `GH_TELEMETRY` | `false` | GitHub CLI (2.91.0 以降) の利用状況 telemetry |
+| `DO_NOT_TRACK` | `1` | 慣習的な opt-out。gh と Claude Code の survey が参照する |
+
+`settings.json` は生ファイルのため値を複製している。一致は `make check` の `telemetry-env` が検査する。
+
+`DISABLE_TELEMETRY` は Claude Code の Remote Control が依存する feature flag の評価も無効化する ([Data usage](https://code.claude.com/docs/en/data-usage#telemetry-services))。自動更新等を含む非必須通信全体を止める `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` は、telemetry 以外の機能にも影響するため設定していない。
+
+Codex CLI の telemetry は環境変数では制御できない。`config.toml` の `analytics.enabled`、`feedback.enabled`、`[otel]` の `metrics_exporter` が対象であり、本リポジトリは `config.toml` を配布しないため対象外である。
+
 ### Agent の作業規約
 
 `home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。

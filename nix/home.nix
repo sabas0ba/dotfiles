@@ -16,6 +16,12 @@
     # 追従したい場合を除いて変更しない。
     stateVersion = "26.05";
 
+    # telemetry とデータ収集の無効化 (一覧は nix/telemetry.nix)。
+    #
+    # home-manager がシェルを管理しない本構成では hm-session-vars.sh を読み込む
+    # シェルにのみ反映される。WSL 上の NixOS は nix/wsl.nix が system 側でも設定する。
+    sessionVariables = import ./telemetry.nix;
+
     # home/ 以下をホームディレクトリの構造に対応させる。
     #
     # recursive = true はディレクトリ自体ではなくその配下のファイルを個別に
