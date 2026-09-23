@@ -758,6 +758,15 @@ install_home() {
   dotfiles_install_home "$repo" "$HOME" "${CODEX_HOME:-$HOME/.codex}"
 }
 
+# etc/ 以下を /etc へ配置する。
+#
+# Codex の telemetry 設定 (etc/codex/config.toml) は user 層に置くと Codex 自身の
+# 書き込みと衝突するため、system 層へ置く。setup-script 経路は root で実行され、
+# 使い捨ての VM が対象であるため /etc へ書き込む。
+install_etc() {
+  dotfiles_install_etc "$repo" /etc
+}
+
 # --- 実行 --------------------------------------------------------------------
 
 # 記録はここから始める。これより前の経路 (引数の誤り、リモート実行環境でない、
@@ -798,6 +807,9 @@ else
 
   step "ホームディレクトリの構成を配置する"
   install_home
+
+  step "system の構成を配置する"
+  install_etc
 fi
 
 step "環境を検査する"

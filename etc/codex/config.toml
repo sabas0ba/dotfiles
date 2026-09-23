@@ -1,0 +1,22 @@
+# Codex CLI の system 層の設定。/etc/codex/config.toml に配置する。
+#
+# telemetry とデータ収集を無効化する。Codex はこれらを環境変数で制御できない。
+# user 層 (${CODEX_HOME}/config.toml) は Codex 自身が書き込むため、読み取り専用の
+# symlink で配置する home-manager の対象にできない。system 層は user 層より優先度が
+# 低いため、user 層に同じ key があればそちらが有効になる。
+#
+# 根拠は openai/codex の codex-rs/config/src/loader/mod.rs (層の順序)、
+# codex-rs/core/src/otel_init.rs と codex-rs/core/src/config/mod.rs (各 key の既定値)。
+
+# 利用状況の analytics event。無効化すると metrics の exporter も None になる。
+[analytics]
+enabled = false
+
+# /feedback による log と会話の送信。既定値は true。
+[feedback]
+enabled = false
+
+# metrics の exporter。既定値は statsig で、OpenAI へ送信する。analytics の無効化と
+# 重複するが、analytics の既定値の解決に依存しないよう明示する。
+[otel]
+metrics_exporter = "none"

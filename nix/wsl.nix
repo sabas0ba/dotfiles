@@ -49,16 +49,22 @@
     "flakes"
   ];
 
-  # telemetry とデータ収集の無効化 (一覧は nix/telemetry.nix)。
-  #
-  # home-manager の sessionVariables はシェルが hm-session-vars.sh を読み込む場合に
-  # 限られるため、system 側でも設定し、全ユーザーのログインシェルに反映する。
-  environment.sessionVariables = import ./telemetry.nix;
+  environment = {
+    # telemetry とデータ収集の無効化 (一覧は nix/telemetry.nix)。
+    #
+    # home-manager の sessionVariables はシェルが hm-session-vars.sh を読み込む場合に
+    # 限られるため、system 側でも設定し、全ユーザーのログインシェルに反映する。
+    sessionVariables = import ./telemetry.nix;
 
-  # リポジトリの取得と direnv の利用に要るもののみ。他は開発シェルから取得する。
-  environment.systemPackages = [
-    pkgs.git
-  ];
+    # Codex は telemetry を環境変数で制御できないため、system 層の config.toml で
+    # 無効化する。理由は同ファイルの冒頭を参照する。
+    etc."codex/config.toml".source = ../etc/codex/config.toml;
+
+    # リポジトリの取得と direnv の利用に要るもののみ。他は開発シェルから取得する。
+    systemPackages = [
+      pkgs.git
+    ];
+  };
 
   # 構成の互換性の基準となる NixOS のリリース。追従したい場合を除いて変更しない。
   system.stateVersion = "26.05";

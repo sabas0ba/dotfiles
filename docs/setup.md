@@ -254,6 +254,7 @@ git -C /opt/dotfiles log -1 --format='%H %cs %s'
 | 環境の引き渡し | `$CLAUDE_ENV_FILE` へ書く | 行わない |
 | ツールの配置 | 行わない | `/usr/local/bin` へ symlink する |
 | ホームの構成の配置 | 行わない | `home/` 以下を `$HOME` へ置く (`home/.codex/` は `$CODEX_HOME` が設定されていればその直下へ置く) |
+| system の構成の配置 | 行わない | `etc/` 以下を `/etc` へ置く |
 | 追加パッケージ | 環境変数で指定する | 引数または環境変数で指定する |
 | 構成の記録 | 行う | 行う |
 

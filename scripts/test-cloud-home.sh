@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Cloud Setup による home/ 配置先と backup の再実行時動作を検査する。
+# Cloud Setup による home/ と etc/ の配置先と backup の再実行時動作を検査する。
 set -euo pipefail
 
 script_dir=$(cd "$(dirname "$0")" && pwd)
@@ -59,5 +59,20 @@ fallback_home=$work/fallback-home
 mkdir -p "$fallback_home"
 dotfiles_install_home "$repo" "$fallback_home" "$fallback_home/.codex"
 cmp -s "$repo/home/.codex/AGENTS.md" "$fallback_home/.codex/AGENTS.md"
+
+# etc/ は引数の etc_root 直下へ置き、内容が異なる既存ファイルを初回だけ退避する。
+etc_root=$work/etc
+mkdir -p "$repo/etc/codex" "$etc_root/codex"
+printf 'managed-etc-v1\n' >"$repo/etc/codex/config.toml"
+printf 'original-etc\n' >"$etc_root/codex/config.toml"
+
+dotfiles_install_etc "$repo" "$etc_root"
+cmp -s "$repo/etc/codex/config.toml" "$etc_root/codex/config.toml"
+grep -qxF 'original-etc' "$etc_root/codex/config.toml.dotfiles-backup"
+
+printf 'managed-etc-v2\n' >"$repo/etc/codex/config.toml"
+dotfiles_install_etc "$repo" "$etc_root"
+grep -qxF 'original-etc' "$etc_root/codex/config.toml.dotfiles-backup"
+grep -qxF 'managed-etc-v2' "$etc_root/codex/config.toml"
 
 echo "Cloud home 配置の検査に成功しました。"

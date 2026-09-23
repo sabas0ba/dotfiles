@@ -18,6 +18,7 @@ Dockerfile               同一の flake からコンテナを構築する
 Makefile                 操作の入り口
 scripts/                 ヘルパースクリプト
 home/                    ホームディレクトリへ配置する生ファイル
+etc/                     /etc へ配置する生ファイル (Codex の system 層の設定)
 docs/                    本ドキュメント (GitHub Pages で公開する)
 .github/workflows/       CI と Pages の定義
 .claude/settings.json    Claude Code のフック定義 (クラウド環境の構成)

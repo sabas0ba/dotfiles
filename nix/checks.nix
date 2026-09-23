@@ -143,7 +143,7 @@ in
     WSL_REPOSITORY_TEST_TMPDIR="$TMPDIR" bash scripts/test-wsl-repository.sh
   '';
 
-  # Cloud Setup の home/ 配置先、CODEX_HOME の fallback、backup の一回性。
+  # Cloud Setup の home/ と etc/ の配置先、CODEX_HOME の fallback、backup の一回性。
   # source は読み取り専用の store にあるため、書き込み先を明示して渡す。
   cloud-home = mkCheck "cloud-home" [ pkgs.bashInteractive pkgs.coreutils pkgs.findutils ] ''
     CLOUD_HOME_TEST_TMPDIR="$TMPDIR" bash scripts/test-cloud-home.sh
@@ -171,6 +171,19 @@ in
         exit 1
       fi
     '';
+
+  # etc/codex/config.toml が TOML として読め、telemetry を無効化する値を持つこと。
+  # Codex は未知の値や壊れた TOML で起動に失敗するため、配置前に検出する。
+  codex-telemetry = mkCheck "codex-telemetry" [ pkgs.yq-go ] ''
+    if ! yq -p toml -o yaml -e '
+      .analytics.enabled == false and
+      .feedback.enabled == false and
+      .otel.metrics_exporter == "none"
+    ' etc/codex/config.toml >/dev/null; then
+      echo "etc/codex/config.toml が telemetry を無効化していません。" >&2
+      exit 1
+    fi
+  '';
 
   # Setup script が現在の toolchain profile へ更新され、追加・削除されたコマンドの
   # 管理リンクを利用者の変更と区別しながら収束させること。

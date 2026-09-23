@@ -99,7 +99,11 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 ### Telemetry の無効化
 
-Claude Code と GitHub CLI の telemetry およびデータ収集を環境変数で無効化する。一覧は [`nix/telemetry.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/telemetry.nix) が単一情報源であり、次の経路に反映する。
+Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およびデータ収集を無効化する。前 3 者は環境変数、Codex は環境変数で制御できないため system 層の `config.toml` で扱う。
+
+#### 環境変数
+
+一覧は [`nix/telemetry.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/telemetry.nix) が単一情報源であり、次の経路に反映する。
 
 | 経路 | 反映先 |
 | --- | --- |
@@ -108,7 +112,7 @@ Claude Code と GitHub CLI の telemetry およびデータ収集を環境変数
 | `nix/wsl.nix` の `environment.sessionVariables` | WSL 上の NixOS の全ユーザーのログインシェル |
 | 開発シェルと profile の環境 | `nix develop`、direnv、Docker image (entrypoint が開発シェルに入る)、`dotfiles-toolchain-info environment` |
 
-クラウド環境の Bash へは `scripts/cloud-setup.sh` が開発シェルの一部の変数だけを引き渡すため、上記の開発シェルの経路は及ばない。同スクリプトが配置する `~/.claude/settings.json` の `env` が適用される。
+クラウド環境の Bash へは `scripts/cloud-setup.sh` が開発シェルの一部の変数だけを引き渡すため、上記の開発シェルの経路は及ばない。setup script 経路では同スクリプトが配置する `~/.claude/settings.json` の `env` が適用される。フック経路は `home/` を配置しないため対象外である。
 
 | 変数 | 値 | 対象 |
 | --- | --- | --- |
@@ -116,20 +120,54 @@ Claude Code と GitHub CLI の telemetry およびデータ収集を環境変数
 | `DISABLE_ERROR_REPORTING` | `1` | Claude Code のエラー報告 |
 | `DISABLE_FEEDBACK_COMMAND` | `1` | Claude Code の `/feedback`、`/bug`、`/share` |
 | `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` | `1` | Claude Code のセッション品質 survey と transcript 共有の確認 |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | Claude Code の非必須通信全体 (上記 4 項目を含む) |
 | `GH_TELEMETRY` | `false` | GitHub CLI (2.91.0 以降) の利用状況 telemetry |
-| `DO_NOT_TRACK` | `1` | 慣習的な opt-out。gh と Claude Code の survey が参照する |
+| `COPILOT_OFFLINE` | `true` | GitHub Copilot CLI の offline mode。telemetry を含め GitHub へ接続しない |
+| `DO_NOT_TRACK` | `1` | 慣習的な opt-out。gh と Claude Code が参照する |
 
 `settings.json` は生ファイルのため値を複製している。一致は `make check` の `telemetry-env` が検査する。
 
-`DISABLE_TELEMETRY` は Claude Code の Remote Control が依存する feature flag の評価も無効化する ([Data usage](https://code.claude.com/docs/en/data-usage#telemetry-services))。自動更新等を含む非必須通信全体を止める `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` は、telemetry 以外の機能にも影響するため設定していない。
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` と `DISABLE_TELEMETRY` は `0` や `false` でも有効になる。戻す場合は変数ごと削除する。
 
-Codex CLI の telemetry は環境変数では制御できない。`config.toml` の `analytics.enabled`、`feedback.enabled`、`[otel]` の `metrics_exporter` が対象であり、本リポジトリは `config.toml` を配布しないため対象外である。
+#### Claude Code への副作用
+
+一次情報は [Environment variables](https://code.claude.com/docs/en/env-vars) と [Data usage](https://code.claude.com/docs/en/data-usage#telemetry-services) である。
+
+`DISABLE_TELEMETRY`、`DO_NOT_TRACK`、`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` のいずれかで feature flag の取得が止まり、次が使えなくなる。
+
+- `AGENTS.md` の自動読み込み (`CLAUDE.md` のみ読む)。本リポジトリと `home/.claude/CLAUDE.md` は `@` import で `AGENTS.md` を読むため影響しない
+- Pro / Max / Team plan での auto mode による既定の開始
+- Remote Control、他のマシンのセッションへの messaging
+- claude.ai で有効にした skill と plugin の同期
+- advisor tool、`/skill-doctor`、`claude import`
+- artifact の comment の読み取りと返信
+- 大きな貼り付けを pasted text として扱う処理、API が拒否する MCP tool schema の除外
+
+`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` は加えて次を止める。
+
+- 自動更新、release notes、PR / MR status badge の確認、fast mode 等の可用性確認
+- plugin の `command` source の background 実行
+- artifact の作成
+
+公式 plugin marketplace の自動導入と WebFetch の domain 検査は対象外であり、それぞれ `CLAUDE_CODE_DISABLE_OFFICIAL_MARKETPLACE_AUTOINSTALL` と `skipWebFetchPreflight` で制御する。後者は安全性の検査のため無効化していない。
+
+#### Codex CLI
+
+[`etc/codex/config.toml`](https://github.com/sabas0ba/dotfiles/blob/main/etc/codex/config.toml) を system 層の `/etc/codex/config.toml` に置き、`analytics.enabled`、`feedback.enabled`、`otel.metrics_exporter` で無効化する。user 層 (`${CODEX_HOME}/config.toml`) は Codex 自身が書き込むため、home-manager による読み取り専用の配置と両立しない。system 層は user 層より優先度が低く、user 層で同じ key を設定するとそちらが有効になる。
+
+| 環境 | 配置 |
+| --- | --- |
+| WSL 上の NixOS | `nix/wsl.nix` の `environment.etc` (`make wsl-switch`) |
+| クラウド環境 (setup script 経路) | `scripts/cloud-setup.sh` が `/etc` へ複製する |
+| その他の home-manager 対象 | 自動では配置しない。`sudo install -D -m 0644 etc/codex/config.toml /etc/codex/config.toml` で配置する |
+
+値は `make check` の `codex-telemetry` が検査する。
 
 ### Agent の作業規約
 
 `home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
 
-`home/.codex` もファイル単位で配置するため、Codex が同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む `config.toml` は本リポジトリでは配布しない。
+`home/.codex` もファイル単位で配置するため、Codex が同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む user 層の `config.toml` は本リポジトリでは配布しない。telemetry の無効化だけを system 層に置く ([Codex CLI](#codex-cli))。
 
 ## コンテナ環境
 
