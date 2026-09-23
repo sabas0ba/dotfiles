@@ -60,19 +60,61 @@ mkdir -p "$fallback_home"
 dotfiles_install_home "$repo" "$fallback_home" "$fallback_home/.codex"
 cmp -s "$repo/home/.codex/AGENTS.md" "$fallback_home/.codex/AGENTS.md"
 
-# etc/ は引数の etc_root 直下へ置き、内容が異なる既存ファイルを初回だけ退避する。
+# Codex の system config は既存の管理外 key を保持し、dotfiles 側の key を優先する。
+# 最初の既存内容は再実行しても backup として保持する。
 etc_root=$work/etc
 mkdir -p "$repo/etc/codex" "$etc_root/codex"
-printf 'managed-etc-v1\n' >"$repo/etc/codex/config.toml"
-printf 'original-etc\n' >"$etc_root/codex/config.toml"
+cat >"$repo/etc/codex/config.toml" <<'EOF'
+[analytics]
+enabled = false
+
+[shell_environment_policy.set]
+GH_TELEMETRY = "false"
+EOF
+cat >"$etc_root/codex/config.toml" <<'EOF'
+custom = "preserve"
+
+[analytics]
+enabled = true
+
+[otel]
+trace_exporter = "otlp-http"
+
+[shell_environment_policy.set]
+GH_TELEMETRY = "true"
+EXISTING = "keep"
+EOF
+cp "$etc_root/codex/config.toml" "$work/original-codex-system.toml"
 
 dotfiles_install_etc "$repo" "$etc_root"
-cmp -s "$repo/etc/codex/config.toml" "$etc_root/codex/config.toml"
-grep -qxF 'original-etc' "$etc_root/codex/config.toml.dotfiles-backup"
+cmp -s "$work/original-codex-system.toml" "$etc_root/codex/config.toml.dotfiles-backup"
+yq -p toml -e '
+  .custom == "preserve" and
+  .analytics.enabled == false and
+  .otel.trace_exporter == "otlp-http" and
+  .shell_environment_policy.set.GH_TELEMETRY == "false" and
+  .shell_environment_policy.set.EXISTING == "keep"
+' "$etc_root/codex/config.toml" >/dev/null
 
-printf 'managed-etc-v2\n' >"$repo/etc/codex/config.toml"
+cat >"$repo/etc/codex/config.toml" <<'EOF'
+[analytics]
+enabled = false
+
+[feedback]
+enabled = false
+
+[shell_environment_policy.set]
+GH_TELEMETRY = "disabled"
+EOF
 dotfiles_install_etc "$repo" "$etc_root"
-grep -qxF 'original-etc' "$etc_root/codex/config.toml.dotfiles-backup"
-grep -qxF 'managed-etc-v2' "$etc_root/codex/config.toml"
+cmp -s "$work/original-codex-system.toml" "$etc_root/codex/config.toml.dotfiles-backup"
+yq -p toml -e '
+  .custom == "preserve" and
+  .analytics.enabled == false and
+  .feedback.enabled == false and
+  .otel.trace_exporter == "otlp-http" and
+  .shell_environment_policy.set.GH_TELEMETRY == "disabled" and
+  .shell_environment_policy.set.EXISTING == "keep"
+' "$etc_root/codex/config.toml" >/dev/null
 
 echo "Cloud home 配置の検査に成功しました。"
