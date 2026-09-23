@@ -99,7 +99,7 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 ### Telemetry の無効化
 
-Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およびデータ収集を無効化する。前 3 者は環境変数、Codex は環境変数で制御できないため system 層の `config.toml` で扱う。
+Claude Code、GitHub CLI、Codex CLI の telemetry およびデータ収集を無効化する。Claude Code と GitHub CLI は環境変数、Codex は環境変数で制御できないため system 層の `config.toml` で扱う。
 
 #### 環境変数
 
@@ -135,10 +135,11 @@ fi
 | `CLAUDE_CODE_DISABLE_FEEDBACK_SURVEY` | `1` | Claude Code のセッション品質 survey と transcript 共有の確認 |
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | `1` | Claude Code の非必須通信全体 (上記 4 項目を含む) |
 | `GH_TELEMETRY` | `false` | GitHub CLI (2.91.0 以降) の利用状況 telemetry |
-| `COPILOT_OFFLINE` | `true` | GitHub Copilot CLI の offline mode。telemetry を含め GitHub へ接続しない |
 | `DO_NOT_TRACK` | `1` | 慣習的な opt-out。gh と Claude Code が参照する |
 
 `settings.json` と `etc/codex/config.toml` は生ファイルのため値を複製している。一致は `make check` の `telemetry-env` と `codex-telemetry` が検査する。
+
+GitHub Copilot CLI は telemetry だけを無効化する公開設定を持たない。`COPILOT_OFFLINE=true` は telemetry を止める一方で GitHub への接続と認証も無効にし、BYOK provider を使う offline mode へ動作を変えるため、本共通設定には含めない。offline / BYOK で使う環境だけ個別に設定する。
 
 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` と `DISABLE_TELEMETRY` は `0` や `false` でも有効になる。戻す場合は変数ごと削除する。
 
@@ -171,7 +172,7 @@ fi
 | 環境 | 配置 |
 | --- | --- |
 | WSL 上の NixOS | `nix/wsl.nix` の `environment.etc` (`make wsl-switch`) |
-| クラウド環境 (setup script 経路) | `scripts/cloud-setup.sh` が `/etc` へ複製する |
+| クラウド環境 (setup script 経路) | `scripts/cloud-setup.sh` が既存の `/etc/codex/config.toml` を保持しつつ、本ファイルの値を overlay する |
 | その他の home-manager 対象 | 自動では配置しない。`sudo install -D -m 0644 etc/codex/config.toml /etc/codex/config.toml` で配置する |
 
 値は `make check` の `codex-telemetry` が検査する。
