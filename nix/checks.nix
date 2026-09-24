@@ -75,7 +75,7 @@ in
 
   # flake.nix の入力と flake.lock の整合。
   # 入力がブランチ名で参照されている場合、nix はこれを正常として扱うため、この検査が
-  # 無ければ固定漏れが通過する。ネットワークは使用しない。
+  # 無ければ revision が固定されていない入力を検出できない。ネットワークは使用しない。
   lock = mkCheck "lock" [ pkgs.jq ] ''
     bash scripts/check-lock.sh
   '';

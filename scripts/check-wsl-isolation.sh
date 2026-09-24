@@ -51,7 +51,7 @@ ok() {
 #
 #   ドライブ文字  automount が有効な場合、/mnt/c のようにドライブ文字のマウント
 #                 ポイントが現れる
-#   filesystem    automount.root を変更した場合、ドライブ文字だけでは漏れる。WSL が
+#   filesystem    automount.root を変更した場合、ドライブ文字だけでは検出できない。WSL が
 #                 Windows 側を見せる際の filesystem は 9p (WSL2) または drvfs (WSL1)
 #
 # /mnt/wsl と /usr/lib/wsl は WSL 自身が使用する領域であり、automount とは独立に

@@ -63,7 +63,7 @@ export FAKE_TOOLCHAIN_OUTPUT=$output_one
 mkdir -p "$(dirname "$extra_profile")"
 ln -s "$extra_output" "$extra_profile"
 
-# manifest 導入前の版が張った link の移行。profile の更新で指す先を失ったものは
+# manifest 導入前の版が作成した link の移行。profile の更新で指す先を失ったものは
 # 初回の manifest 実行で取り除き、管理外の壊れた link には触れない。
 mkdir -p "$bin_dir"
 ln -s "$profile/bin/removed-by-upgrade" "$bin_dir/removed-by-upgrade"

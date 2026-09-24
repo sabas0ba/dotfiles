@@ -216,7 +216,7 @@
       #
       # nixfmt を直接指定してはならない。`nix fmt` は引数無しでフォーマッタを起動する
       # ことがあり、その場合 nixfmt は標準入力を読もうとして失敗する。対象が
-      # 与えられなかったときに対象を補うラッパを噛ませる。
+      # 与えられなかったときに対象を補うラッパを経由して起動する。
       formatter = forAllSystems (
         pkgs:
         pkgs.writeShellApplication {
