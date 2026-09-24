@@ -39,6 +39,15 @@
   # gh 2.91.0 以降の利用状況 telemetry。false 相当の値で無効化する。
   GH_TELEMETRY = "false";
 
+  # --- GitHub Copilot CLI -------------------------------------------------------
+  # https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/authenticate-copilot-cli
+
+  # offline mode。telemetry を止めるが、GitHub への接続と認証も行わなくなり、BYOK
+  # provider を使う動作に変わる。telemetry だけを止める公開設定は無い。Copilot は
+  # GitHub の Web 上でのみ使い CLI は使わない前提のため、CLI の機能を失うことを許容する。
+  # CLI を使う環境では当該変数を unset する。
+  COPILOT_OFFLINE = "true";
+
   # --- 共通 -------------------------------------------------------------------
 
   # 複数のツールが参照する opt-out の慣習。gh は "1" または "true" を無効化として
