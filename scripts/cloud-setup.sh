@@ -634,6 +634,11 @@ write_env_file() {
       for name in PATH USER DOTFILES_ENV DOTFILES_ROOT LC_ALL; do
         printf "export %s=%q\n" "$name" "${!name}"
       done
+
+      # profile の環境 (nix/telemetry.nix の telemetry の無効化を含む) も渡す。
+      # 名前を上に列挙すると nix/telemetry.nix と二重管理になるため、flake.nix が
+      # 生成した export 行の定義をそのまま使う。
+      cat "$DOTFILES_PROFILE_ENV"
     ' bash "$extra_bin" | grep '^export ' || true
   )
 
@@ -758,6 +763,16 @@ install_home() {
   dotfiles_install_home "$repo" "$HOME" "${CODEX_HOME:-$HOME/.codex}"
 }
 
+# etc/ 以下を /etc へ配置する。
+#
+# Codex の telemetry 設定 (etc/codex/config.toml) は user 層に置くと Codex 自身の
+# 書き込みと衝突するため、system 層へ置く。既存の system config がある場合は
+# cloud-home.sh 側で管理外 key を保持して overlay する。setup-script 経路は root で
+# 実行され、使い捨ての VM が対象であるため /etc へ書き込む。
+install_etc() {
+  dotfiles_install_etc "$repo" /etc
+}
+
 # --- 実行 --------------------------------------------------------------------
 
 # 記録はここから始める。これより前の経路 (引数の誤り、リモート実行環境でない、
@@ -798,6 +813,9 @@ else
 
   step "ホームディレクトリの構成を配置する"
   install_home
+
+  step "system の構成を配置する"
+  install_etc
 fi
 
 step "環境を検査する"

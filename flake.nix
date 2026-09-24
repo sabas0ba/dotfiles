@@ -63,7 +63,10 @@
           '';
           commandManifest = "${commandManifestPackage}/share/dotfiles/required-commands";
 
-          profileEnvironmentValues = profile.env // {
+          # telemetry の無効化は profile に依らず共通とする。profile 固有の値を優先する。
+          toolchainEnv = import ./nix/telemetry.nix // profile.env;
+
+          profileEnvironmentValues = toolchainEnv // {
             DOTFILES_COMMAND_MANIFEST = commandManifest;
             DOTFILES_TOOLCHAIN_PROFILE = profileName;
           };
@@ -116,6 +119,7 @@
               profile
               profileEnvironment
               profileName
+              toolchainEnv
               ;
           };
 
