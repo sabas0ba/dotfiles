@@ -174,7 +174,9 @@ GitHub Copilot CLI は telemetry だけを無効化する公開設定を持た�
 | --- | --- |
 | WSL 上の NixOS | `nix/wsl.nix` の `environment.etc` (`make wsl-switch`) |
 | クラウド環境 (setup script 経路) | `scripts/cloud-setup.sh` が既存の `/etc/codex/config.toml` を保持しつつ、本ファイルの値を overlay する |
-| その他の home-manager 対象 | 自動では配置しない。`sudo install -D -m 0644 etc/codex/config.toml /etc/codex/config.toml` で配置する |
+| その他の home-manager 対象 | 自動では配置しない。開発シェル内で `sudo env "PATH=$PATH" scripts/install-etc.sh` を実行する。クラウド環境と同じ処理で overlay する |
+
+既存の `/etc/codex/config.toml` は初回だけ `.dotfiles-backup` へ退避し、管理外の key を保持したまま本ファイルの値を重ねる。書き戻しでコメントは失われる。日時の値を含む場合や merge 結果を検証できない場合は、既存ファイルを変更せずに失敗する ([Setup script の制約](setup.md) を参照)。
 
 値は `make check` の `codex-telemetry` が検査する。
 
