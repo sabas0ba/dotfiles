@@ -7,8 +7,8 @@
 #   1. 選択した profile のコマンド契約が揃っていること
 #   2. その実体が Nix の store にあること
 #
-# 1 だけではホストに元から入っているツールを拾ってしまうため、2 を併せて見る。
-# 実体まで辿るのは、cloud-setup.sh の setup-script 経路が /usr/local/bin へ張った
+# 1 だけではホストに元から入っているツールも合格としてしまうため、2 を併せて見る。
+# 実体まで辿るのは、cloud-setup.sh の setup-script 経路が /usr/local/bin へ作成した
 # symlink 経由でも成立させるためである。
 #
 # 開発シェルの内部にいるか (DOTFILES_ENV) は判定に用いない。setup-script 経路には

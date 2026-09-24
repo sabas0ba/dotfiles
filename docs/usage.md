@@ -42,7 +42,7 @@ make toolchain-build TOOLCHAIN_PROFILE=full
 
 `scripts/check-env.sh` の検査対象も選択した profile に追従する。コマンド一覧を shell script 側で重複管理せず、`nix/packages.nix` の各 package と対応付けたコマンド契約から生成する。
 
-Playwright の browser path は `nix develop .#browser` と Docker では自動的に設定される。`nix build .#browser` の出力を PATH へ直接載せる場合は、同じ出力に含まれる環境定義も読み込む。
+Playwright の browser path は `nix develop .#browser` と Docker では自動的に設定される。`nix build .#browser` の出力を PATH へ直接追加する場合は、同じ出力に含まれる環境定義も読み込む。
 
 ```bash
 out=$(nix build --no-link --print-out-paths .#browser)

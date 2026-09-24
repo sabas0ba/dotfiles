@@ -34,7 +34,7 @@ dotfiles_install_toolchain_links() {
 
   mkdir -p "$bin_dir" "$(dirname "$manifest")"
 
-  # manifest が無い初回実行では、以前の版が manifest なしで張った link が残っている。
+  # manifest が無い初回実行では、以前の版が manifest なしで作成した link が残っている。
   # profile の更新で指す先を失ったものは、記録に載らないままだと以後も回収されない
   # ため、管理対象のディレクトリを指す壊れた symlink をここで取り除く。指す先が
   # 生きている link は、現在の profile の分として後続の配置で張り直される。
@@ -51,7 +51,7 @@ dotfiles_install_toolchain_links() {
     done
   fi
 
-  # 後の配置元ほど優先される (同名は後から張った symlink と manifest の記録が残る)。
+  # 後の配置元ほど優先される (同名は後から作成した symlink と manifest の記録が残る)。
   local sources=("$profile"/bin/* "$nix_bin"/* "$extra_profile"/bin/*)
 
   for source in "${sources[@]}"; do
@@ -66,7 +66,7 @@ dotfiles_install_toolchain_links() {
       return 1
     fi
 
-    # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が張った
+    # 置き換える前に、system 側で同名が解決できていたかを見る。既に本処理が作成した
     # symlink と Nix の実体は対象から除く。
     existing=$(command -v "$name" 2>/dev/null || true)
     case "$existing" in
