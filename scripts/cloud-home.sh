@@ -77,16 +77,57 @@ dotfiles_overlay_toml() {
     note "退避した ${backup#"$base/"}"
   fi
 
-  tmp=$(mktemp "$target.dotfiles-tmp.XXXXXX")
-  if ! yq eval-all -p toml -o toml \
-    'select(fileIndex == 0) * select(fileIndex == 1)' \
-    "$target" "$source" >"$tmp"; then
-    rm -f "$tmp"
+  # yq は TOML の日時を文字列として読み、書き戻すと型が変わる。型を区別する手段が
+  # 無いため、日時の値らしい記述があれば書き換えずに止める。文字列の中身に一致した
+  # 場合も止まるが、誤って型を変えるよりよい。
+  if grep -Eq '[=,[][[:space:]]*([0-9]{4}-[0-9]{2}-[0-9]{2}|[0-9]{2}:[0-9]{2}:[0-9]{2})' "$target"; then
+    echo "エラー: $target に日時の値があるため overlay できません。" >&2
+    echo "       手作業で ${source#"$base/"} の値を反映してください。" >&2
     return 1
   fi
-  cp -f "$tmp" "$target"
-  rm -f "$tmp"
+
+  tmp=$(mktemp -d "$target.dotfiles-tmp.XXXXXX")
+  if ! dotfiles_merge_toml "$target" "$source" "$tmp"; then
+    rm -rf "$tmp"
+    echo "エラー: $target の overlay に失敗しました。既存のファイルは変更していません。" >&2
+    return 1
+  fi
+  cp -f "$tmp/merged.toml" "$target"
+  rm -rf "$tmp"
   note "overlay した ${target#"$base/"}"
+}
+
+# TOML の table 見出しより後の key はその table に属する。yq の TOML 出力は key の
+# 順序を保つだけで並べ替えないため、既存ファイルが dotted key や inline table を
+# 通常の key より前に置いていると、後続の key が別の table に移る。各階層で値を
+# table より前に並べてから出力する。
+readonly DOTFILES_TOML_ORDER='
+def is_table: type == "object" or (type == "array" and length > 0 and all(.[]; type == "object"));
+def toml_order:
+  if type == "object" then
+    to_entries
+    | (map(select(.value | is_table | not)) + map(select(.value | is_table)))
+    | map(.value |= toml_order)
+    | from_entries
+  elif type == "array" then map(toml_order)
+  else . end;
+'
+
+# base と overlay を merge した TOML を $work/merged.toml に書く。書いたものを読み直し、
+# merge の結果と意味が一致しない場合は失敗する。コメントは保持しない (元の内容は
+# 呼び出し側が .dotfiles-backup に退避している)。
+dotfiles_merge_toml() {
+  local base=$1
+  local overlay=$2
+  local work=$3
+
+  yq -p toml -o json "$base" >"$work/base.json" &&
+    yq -p toml -o json "$overlay" >"$work/overlay.json" &&
+    jq -s "$DOTFILES_TOML_ORDER"' .[0] * .[1] | toml_order' \
+      "$work/base.json" "$work/overlay.json" >"$work/expected.json" &&
+    yq -p json -o toml "$work/expected.json" >"$work/merged.toml" &&
+    yq -p toml -o json "$work/merged.toml" | jq -S . >"$work/actual.json" &&
+    jq -S . "$work/expected.json" | cmp -s - "$work/actual.json"
 }
 
 # etc/ 以下を system の /etc (引数 etc_root) の構造に対応させて配置する。

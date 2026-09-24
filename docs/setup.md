@@ -263,7 +263,7 @@ Setup script には `CLAUDE_ENV_FILE` が無く、セッションのシェルは
 - system の同名のコマンド (`git`、coreutils 等) は Nix 版に置き換わる。覆ったものは実行時に列挙する
 - 言語のツールチェーン (Node、Python 等) は含まない。クラウド環境が持つものを使うか、[追加のパッケージ](#追加のパッケージを指定する)として指定する
 - ホームの構成は home-manager を経由しない (前節のとおり取得できないため)。置く内容は同一で、既存のファイルは上書きする。内容が異なるものは初回に `<ファイル名>.dotfiles-backup` へ退避する
-- `/etc/codex/config.toml` は既存内容を初回に `.dotfiles-backup` へ退避したうえで TOML として merge し、既存の管理外 key を残して dotfiles 側の key を優先する
+- `/etc/codex/config.toml` は既存内容を初回に `.dotfiles-backup` へ退避したうえで TOML として merge し、既存の管理外 key を残して dotfiles 側の key を優先する。書き戻しでコメントは失われる (退避先に残る)。merge 結果を読み直して意味が一致しない場合と、yq が型を保てない日時の値を含む場合は、既存ファイルを変更せずに失敗する。dotfiles 側から削除した key は既存ファイルに残る
 - 本経路では `DOTFILES_ENV` が設定されない。`scripts/check-env.sh` はコマンドの実体が Nix の store にあることで判定するため、開発シェルを経由せずそのまま実行して成功する
 - flake が複数の toolchain profile を公開する場合は、Setup script の環境変数 `DOTFILES_TOOLCHAIN_PROFILE` に output 名を指定できる。未指定時は `default` となる
 - 初回は数分かかる。Setup script の目安 (5 分) を超えると環境のキャッシュが作られない

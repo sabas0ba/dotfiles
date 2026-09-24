@@ -88,7 +88,7 @@ cp "$etc_root/codex/config.toml" "$work/original-codex-system.toml"
 
 dotfiles_install_etc "$repo" "$etc_root"
 cmp -s "$work/original-codex-system.toml" "$etc_root/codex/config.toml.dotfiles-backup"
-yq -p toml -e '
+yq -p toml -o yaml -e '
   .custom == "preserve" and
   .analytics.enabled == false and
   .otel.trace_exporter == "otlp-http" and
@@ -108,7 +108,7 @@ GH_TELEMETRY = "disabled"
 EOF
 dotfiles_install_etc "$repo" "$etc_root"
 cmp -s "$work/original-codex-system.toml" "$etc_root/codex/config.toml.dotfiles-backup"
-yq -p toml -e '
+yq -p toml -o yaml -e '
   .custom == "preserve" and
   .analytics.enabled == false and
   .feedback.enabled == false and
@@ -116,5 +116,36 @@ yq -p toml -e '
   .shell_environment_policy.set.GH_TELEMETRY == "disabled" and
   .shell_environment_policy.set.EXISTING == "keep"
 ' "$etc_root/codex/config.toml" >/dev/null
+
+# dotted key と inline table の後に通常の key が続く既存ファイルでも、後続の key が
+# table に移らないこと。yq の TOML 出力は key を並べ替えないため、対策が無いと
+# limit と model が [analytics] の下に出力される。
+dotted_root=$work/etc-dotted
+mkdir -p "$dotted_root/codex"
+cat >"$dotted_root/codex/config.toml" <<'EOF'
+analytics.enabled = true
+limit = 12
+tui = { notifications = true }
+model = "keep"
+EOF
+dotfiles_install_etc "$repo" "$dotted_root"
+yq -p toml -o yaml -e '
+  .limit == 12 and
+  .model == "keep" and
+  .tui.notifications == true and
+  .analytics.enabled == false and
+  (.analytics | has("limit") | not)
+' "$dotted_root/codex/config.toml" >/dev/null
+
+# yq は日時を文字列として書き戻し型が変わるため、日時の値があれば変更せずに失敗する。
+datetime_root=$work/etc-datetime
+mkdir -p "$datetime_root/codex"
+printf 'when = 2026-09-24T00:00:00Z\n' >"$datetime_root/codex/config.toml"
+cp "$datetime_root/codex/config.toml" "$work/original-datetime.toml"
+if dotfiles_install_etc "$repo" "$datetime_root" 2>/dev/null; then
+  echo "日時を含む config.toml を overlay しました。" >&2
+  exit 1
+fi
+cmp -s "$work/original-datetime.toml" "$datetime_root/codex/config.toml"
 
 echo "Cloud home 配置の検査に成功しました。"

@@ -153,7 +153,10 @@ in
       [
         pkgs.bashInteractive
         pkgs.coreutils
+        pkgs.diffutils
         pkgs.findutils
+        pkgs.gnugrep
+        pkgs.jq
         pkgs.yq-go
       ]
       ''
