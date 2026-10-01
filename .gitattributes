@@ -1,0 +1,7 @@
+# 作業ツリーの改行を LF に固定する。
+#
+# Git for Windows の既定 (core.autocrlf=true) では checkout が CRLF になる。Windows の
+# checkout を build context とする経路 (wslc build、docker build) では CRLF のまま
+# イメージへ入り、nix/ のシェル断片や scripts/ が構文エラーとなって build が失敗する。
+# 利用者の Git 設定に依存させないため、リポジトリ側で指定する。
+* text=auto eol=lf

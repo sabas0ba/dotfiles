@@ -102,6 +102,12 @@ wslc run --rm --network none dotfiles-dev make check
 
 イメージは [コンテナ環境](usage.md#コンテナ環境) と同じ `Dockerfile` から構築するため、内容は Docker の経路と一致する。build 時に checkout を build context として取り込み、実行時は Windows の path を `-v` でマウントしない。
 
+build context となる checkout の改行は LF である必要がある。CRLF の場合、`nix/` のシェル断片が CRLF のまま derivation に入り、`dotfiles-toolchain-info` の構築が構文エラーで失敗する。`.gitattributes` が LF を指定するため、これを含む revision を新規に clone した場合は対処が要らない。`.gitattributes` の追加より前に `core.autocrlf=true` で取得した checkout は CRLF のまま残るため、clone し直す。状態は次で確認でき、`w/lf` であれば問題ない。
+
+```powershell
+git ls-files --eol nix/packages.nix
+```
+
 使用を始める前に、コンテナ内で `scripts/check-wsl-isolation.sh --force` が成功することを確認する。[Windows 側からの隔離](#windows-側からの隔離) と同じ項目 (ドライブと Windows 側 filesystem のマウント、Windows の実行ファイルのハンドラ、PATH の流入) を検査する。`--force` は WSL の判定に関わらず検査させる指定であり、判定が外れて検査が省略されるのを防ぐ。検査が失敗した場合は、この経路で作業しない。
 
 | | WSL distro | wslc |
@@ -111,7 +117,7 @@ wslc run --rm --network none dotfiles-dev make check
 | Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`scripts/check-wsl-isolation.sh --force` で確認する |
 | 状態の保持 | distro の仮想ディスク | `--rm` を付けなければコンテナに残る |
 
-wslc の経路は CI で検証しておらず、実機での動作も未検証である。特に次の点は公開資料から確認できていない。
+wslc の経路は CI で検証していない。実機では WSL 3.0.1.0 (Windows 10.0.26200.9445) で、digest で固定したベースイメージの取得と `RUN` の実行までを確認した。イメージの構築完了と、コンテナ内での隔離の検査および `make check` は未検証である。特に次の点は確認できていない。
 
 - 対応する Windows の最低 build
 - `--network none` の可否
