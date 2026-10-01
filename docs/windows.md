@@ -117,11 +117,19 @@ git ls-files --eol nix/packages.nix
 | Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`scripts/check-wsl-isolation.sh --force` で確認する |
 | 状態の保持 | distro の仮想ディスク | `--rm` を付けなければコンテナに残る |
 
-wslc の経路は CI で検証していない。実機では WSL 3.0.1.0 (Windows 10.0.26200.9445) で、digest で固定したベースイメージの取得と `RUN` の実行までを確認した。イメージの構築完了と、コンテナ内での隔離の検査および `make check` は未検証である。特に次の点は確認できていない。
+wslc の経路は CI で検証していない。実機では WSL 3.0.1.0 (Windows 10.0.26200.9445、x64) で、default profile について次を確認した。
+
+- `wslc build` が digest で固定したベースイメージから完了する
+- `-v` を指定しないコンテナで `scripts/check-wsl-isolation.sh --force` が成功する。Windows のドライブ、9p / drvfs / virtiofs の mount、`binfmt_misc` の handler はいずれも存在しない
+- `--network none` が使え、インターフェースが `lo` のみの状態で `make check` が成功する
+
+コンテナの kernel は `microsoft-standard-WSL2` を名乗るため、この版では `--force` が無くても WSL と判定される。版によって変わりうるため、手順では `--force` を付ける。
+
+次の点は確認できていない。
 
 - 対応する Windows の最低 build
-- `--network none` の可否
-- `-v` を指定しない場合に Windows のドライブがコンテナから見えないこと (上記の検査で確認する)
+- default 以外の profile の構築
+- `-v` で Windows の path を渡した場合の filesystem の種類 (渡さない運用のため検証していない)
 
 `wslc container prune`、`wslc image prune`、`wsl --shutdown` は、他のコンテナや distro にも作用するため使わない。不要になったものは `wslc container remove <名前>`、`wslc image remove dotfiles-dev` のように対象を指定して削除する。
 
