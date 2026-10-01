@@ -1,6 +1,6 @@
 # Windows (WSL)
 
-WSL の内部に Linux 環境を構築する。PowerShell で 2 コマンド実行すれば、開発シェルに入れる状態まで到達する。
+WSL の内部に Linux 環境を構築する。PowerShell で 2 コマンド実行すれば、開発シェルに入れる状態まで到達する。distro を登録せずコンテナで使う場合は [WSL containers (wslc)](#wsl-containers-wslc) を参照する。
 
 この bootstrap が対象とする Windows とゲストの system は[対応範囲](index.md#対応範囲)にある。
 
@@ -86,6 +86,35 @@ powershell -ExecutionPolicy Bypass -File scripts\wsl-bootstrap.ps1 `
 ```
 
 改変版のリポジトリには、`-User` と同名の対象が `flake.nix` の `homeTargets` に、`-FlakeTarget` と同名の対象が `nixosConfigurations` に必要である。ホームディレクトリの構成を分ける必要がなければ `-User` は省略してよい。配布イメージは共有するため、2 つ目以降で取得は発生しない。
+
+## WSL containers (wslc)
+
+WSL distro を登録せず、`Dockerfile` から構築したコンテナで開発シェルを使う経路である。`wslc.exe` は WSL に同梱されており、Docker Desktop や別のコンテナエンジンを導入しない。WSL 2.9.3 で preview、3.0.1 で GA となった ([WSL 3.0.1 release notes](https://github.com/microsoft/WSL/releases/tag/3.0.1)、[WSL containers](https://learn.microsoft.com/windows/wsl/wsl-container))。`wslc version` で利用可能かを確認する。
+
+```powershell
+cd $HOME\repos\dotfiles
+wslc build -f Dockerfile -t dotfiles-dev .
+wslc build -f Dockerfile --build-arg DOTFILES_TOOLCHAIN_PROFILE=software -t dotfiles-software .
+wslc run --rm -it dotfiles-dev
+wslc run --rm --network none dotfiles-dev make check
+```
+
+イメージは [コンテナ環境](usage.md#コンテナ環境) と同じ `Dockerfile` から構築するため、内容は Docker の経路と一致する。build 時に checkout を build context として取り込み、実行時は Windows の path を `-v` でマウントしない。
+
+| | WSL distro | wslc |
+| --- | --- | --- |
+| 実行単位 | 登録した distro | build したイメージから起動するコンテナ |
+| 構成の適用 | `scripts/wsl-bootstrap.ps1` と `make wsl-switch` | `wslc build` |
+| Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`-v` で渡した path だけを共有する |
+| 状態の保持 | distro の仮想ディスク | `--rm` を付けなければコンテナに残る |
+
+wslc の経路は CI で検証しておらず、実機での動作も未検証である。特に次の点は公開資料から確認できていない。
+
+- 対応する Windows の最低 build
+- `--network none` の可否
+- `-v` を指定しない場合に Windows のドライブがコンテナから見えないこと
+
+`wslc container prune`、`wslc image prune`、`wsl --shutdown` は、他のコンテナや distro にも作用するため使わない。不要になったものは `wslc container remove <名前>`、`wslc image remove dotfiles-dev` のように対象を指定して削除する。
 
 ## 構築後の操作
 
