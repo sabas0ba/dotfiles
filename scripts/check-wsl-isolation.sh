@@ -170,6 +170,13 @@ echo
 
 if [ "$errors" -ne 0 ]; then
   echo "WSL の隔離が成立していません ($errors 件)。" >&2
+  # --force はコンテナでの検査に使う。コンテナには /etc/wsl.conf が及ばないため、
+  # distro 向けの対処を示さない。
+  if [ "$force" -eq 1 ]; then
+    echo "コンテナで検査した場合は、起動時の -v / --mount の指定を外してください。" >&2
+    echo "指定が無い状態で失敗する場合は、この経路で作業しないでください。" >&2
+    exit 1
+  fi
   echo "NixOS では nix/wsl.nix の wsl.wslConf / wsl.interop を確認し、" >&2
   echo "make wsl-switch を実行してください。他のディストリビューションでは" >&2
   echo "/etc/wsl.conf を確認してください。" >&2
