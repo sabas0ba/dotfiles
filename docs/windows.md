@@ -117,19 +117,18 @@ git ls-files --eol nix/packages.nix
 | Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`scripts/check-wsl-isolation.sh --force` で確認する |
 | 状態の保持 | distro の仮想ディスク | `--rm` を付けなければコンテナに残る |
 
-wslc の経路は CI で検証していない。実機では WSL 3.0.1.0 (Windows 10.0.26200.9445、x64) で、default profile について次を確認した。
+wslc の経路は CI で検証していない。実機では WSL 3.0.1.0 (Windows 10.0.26200.9445、x64) で次を確認した。
 
-- `wslc build` が digest で固定したベースイメージから完了する
+- `wslc build` が digest で固定したベースイメージから完了する (default、software、containers、hdl、browser、full の全 profile)
+- `--network none` が使え、インターフェースが `lo` のみの状態で `make check` が成功する (同上の全 profile)
 - `-v` を指定しないコンテナで `scripts/check-wsl-isolation.sh --force` が成功する。Windows のドライブ、9p / drvfs / virtiofs の mount、`binfmt_misc` の handler はいずれも存在しない
-- `--network none` が使え、インターフェースが `lo` のみの状態で `make check` が成功する
+- `-v` で Windows の path を渡すと、device 名 `drvfs`、filesystem `virtiofs` で mount される。検査はこれを検出して失敗する
 
 コンテナの kernel は `microsoft-standard-WSL2` を名乗るため、この版では `--force` が無くても WSL と判定される。版によって変わりうるため、手順では `--force` を付ける。
 
-次の点は確認できていない。
+対応する Windows の最低 build は確認できていない。Microsoft の資料が wslc の要件として記載するのは WSL 2.9.3 以上であることだけで、Windows の build は記載が無い ([WSL containers](https://learn.microsoft.com/windows/wsl/wsl-container)、[Get started with containers on WSL](https://learn.microsoft.com/windows/wsl/tutorials/wsl-containers))。
 
-- 対応する Windows の最低 build
-- default 以外の profile の構築
-- `-v` で Windows の path を渡した場合の filesystem の種類 (渡さない運用のため検証していない)
+既定の session は同じ利用者の他の作業と共有される。`wslc list --all` や `wslc images` には他の作業のコンテナとイメージも現れるため、操作は自分が作成した名前に限る。
 
 `wslc container prune`、`wslc image prune`、`wsl --shutdown` は、他のコンテナや distro にも作用するため使わない。不要になったものは `wslc container remove <名前>`、`wslc image remove dotfiles-dev` のように対象を指定して削除する。
 
