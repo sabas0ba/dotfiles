@@ -95,24 +95,27 @@ WSL distro を登録せず、`Dockerfile` から構築したコンテナで開�
 cd $HOME\repos\dotfiles
 wslc build -f Dockerfile -t dotfiles-dev .
 wslc build -f Dockerfile --build-arg DOTFILES_TOOLCHAIN_PROFILE=software -t dotfiles-software .
+wslc run --rm dotfiles-dev scripts/check-wsl-isolation.sh --force
 wslc run --rm -it dotfiles-dev
 wslc run --rm --network none dotfiles-dev make check
 ```
 
 イメージは [コンテナ環境](usage.md#コンテナ環境) と同じ `Dockerfile` から構築するため、内容は Docker の経路と一致する。build 時に checkout を build context として取り込み、実行時は Windows の path を `-v` でマウントしない。
 
+使用を始める前に、コンテナ内で `scripts/check-wsl-isolation.sh --force` が成功することを確認する。[Windows 側からの隔離](#windows-側からの隔離) と同じ項目 (ドライブと Windows 側 filesystem のマウント、Windows の実行ファイルのハンドラ、PATH の流入) を検査する。`--force` は WSL の判定に関わらず検査させる指定であり、判定が外れて検査が省略されるのを防ぐ。検査が失敗した場合は、この経路で作業しない。
+
 | | WSL distro | wslc |
 | --- | --- | --- |
 | 実行単位 | 登録した distro | build したイメージから起動するコンテナ |
 | 構成の適用 | `scripts/wsl-bootstrap.ps1` と `make wsl-switch` | `wslc build` |
-| Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`-v` で渡した path だけを共有する |
+| Windows 側からの隔離 | `/etc/wsl.conf` で mount、PATH、実行ファイルを無効化し、`make check` が検査する | distro とは別の VM で動作し、`/etc/wsl.conf` は及ばない。`scripts/check-wsl-isolation.sh --force` で確認する |
 | 状態の保持 | distro の仮想ディスク | `--rm` を付けなければコンテナに残る |
 
 wslc の経路は CI で検証しておらず、実機での動作も未検証である。特に次の点は公開資料から確認できていない。
 
 - 対応する Windows の最低 build
 - `--network none` の可否
-- `-v` を指定しない場合に Windows のドライブがコンテナから見えないこと
+- `-v` を指定しない場合に Windows のドライブがコンテナから見えないこと (上記の検査で確認する)
 
 `wslc container prune`、`wslc image prune`、`wsl --shutdown` は、他のコンテナや distro にも作用するため使わない。不要になったものは `wslc container remove <名前>`、`wslc image remove dotfiles-dev` のように対象を指定して削除する。
 

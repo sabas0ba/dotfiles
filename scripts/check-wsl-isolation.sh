@@ -13,8 +13,22 @@
 # WSL 上でない場合は何も検査せずに成功する。Docker コンテナおよび CI で
 # scripts/check-env.sh から呼ばれるため。
 #
-#   使用方法: scripts/check-wsl-isolation.sh
+# --force は WSL の判定に関わらず検査する。WSL containers (wslc) のコンテナは
+# distro とは別の VM で動作し、kernel の表記から WSL と判定できる保証が無い。
+# 判定が外れた場合に検査を省略して成功するのを避けるため、明示的に指定する。
+#
+#   使用方法: scripts/check-wsl-isolation.sh [--force]
 set -euo pipefail
+
+force=0
+case "${1:-}" in
+  "") ;;
+  --force) force=1 ;;
+  *)
+    echo "使用方法: $0 [--force]" >&2
+    exit 2
+    ;;
+esac
 
 # WSL の判定。WSL2 のカーネルは osrelease に microsoft を含む。環境変数
 # WSL_DISTRO_NAME は WSL が設定するが、systemd 配下のサービス等では継承されない
@@ -29,7 +43,7 @@ is_wsl() {
   return 1
 }
 
-if ! is_wsl; then
+if [ "$force" -eq 0 ] && ! is_wsl; then
   echo "  skip    WSL 上ではないため隔離の検査を省略する"
   exit 0
 fi
@@ -52,7 +66,8 @@ ok() {
 #   ドライブ文字  automount が有効な場合、/mnt/c のようにドライブ文字のマウント
 #                 ポイントが現れる
 #   filesystem    automount.root を変更した場合、ドライブ文字だけでは検出できない。WSL が
-#                 Windows 側を見せる際の filesystem は 9p (WSL2) または drvfs (WSL1)
+#                 Windows 側を見せる際の filesystem は 9p (WSL2) または drvfs (WSL1)。
+#                 wslc は `-v` で渡した Windows の path を virtiofs で共有するとされる
 #
 # /mnt/wsl と /usr/lib/wsl は WSL 自身が使用する領域であり、automount とは独立に
 # 現れる。前者は distro 間で共有される領域、後者はホストのドライバとライブラリで
@@ -71,7 +86,7 @@ while read -r _device mountpoint fstype _options; do
   esac
 
   case "$fstype" in
-    9p | drvfs | v9fs) foreign_mounts+=("$mountpoint") ;;
+    9p | drvfs | v9fs | virtiofs) foreign_mounts+=("$mountpoint") ;;
   esac
 done </proc/mounts
 
