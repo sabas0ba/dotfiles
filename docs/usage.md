@@ -188,7 +188,7 @@ GitHub Copilot CLI は telemetry だけを無効化する公開設定を持た�
 
 ## コンテナ環境
 
-ホストと同一の環境をコンテナ内に構築する。`Dockerfile` はツールの一覧を持たず `flake.nix` を評価するため、内容がホストと一致する。
+ホストと同一の環境をコンテナ内に構築する。`Dockerfile` はツールの一覧を持たず `flake.nix` を評価するため、内容がホストと一致する。Windows で WSL containers (`wslc`) を使う場合は [Windows (WSL)](windows.md#wsl-containers-wslc) を参照する。
 
 ```bash
 make docker-build                              # default profile のイメージ構築

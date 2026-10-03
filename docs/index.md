@@ -23,6 +23,7 @@ Nix と direnv による再現性のある開発環境。同じ定義からコ�
 | home-manager (`make hm-*`) | 対応 (定義済み target のみ) | 未対応 (target 未定義) | 未対応 (target 未定義) | 未対応 (target 未定義) | [ホームディレクトリの構成](usage.md#ホームディレクトリの構成) |
 | Windows からの WSL bootstrap | 対応 (x64 Windows) | 未対応 | 対象外 | 対象外 | [Windows (WSL)](windows.md) |
 | Docker イメージ | 対応 (CI 検証済み) | 未検証 | 対象外 | 対象外 | [コンテナ環境](usage.md#コンテナ環境) |
+| WSL containers (`wslc`) | 対応 (x64 Windows、実機検証済み、CI 未検証) | 対象外 | 対象外 | 対象外 | [WSL containers](windows.md#wsl-containers-wslc) |
 | Claude Code / ChatGPT Codex (`cloud-setup.sh`) | 対応 | 未対応 | 対象外 | 対象外 | [クラウド環境](setup.md#claude-code-のクラウド環境) |
 
 開発シェルは `flake.nix` が 4 つの system に出力する。これとは別に、現在定義されている home-manager target はすべて `x86_64-linux` である。該当する target がない system では `make hm-switch` を実行できず、先に `homeTargets` の追加が必要となる。

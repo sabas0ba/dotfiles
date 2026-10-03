@@ -74,8 +74,9 @@ dotfiles の WSL 構成では、Windows 側の mount、PATH 流入、Windows exe
 
 ### Windows host
 
-- Docker または Podman で作業専用 container を作り、リポジトリは container 内または専用 volume に置く。
-- 他の session に影響する daemon / VM の停止・破棄や `system prune` などの全体操作を行わない。操作対象を専用 resource に限定する。
+- Docker、Podman または WSL containers (`wslc`) で作業専用 container を作り、リポジトリは container 内または専用 volume に置く。
+- 他の session に影響する daemon / VM の停止・破棄や `system prune` などの全体操作を行わない。`wslc` では `container prune`、`image prune`、session の終了、`wsl --shutdown` がこれに当たる。操作対象を専用 resource に限定する。
+- `wslc` の container は WSL distro とは別の VM で動作するため、distro 側の `/etc/wsl.conf` による隔離が及ぶことを前提にしない。Windows の path を `-v` で渡さない。作業に使う image ごとに、container 内で Windows filesystem の mount、Windows executable の handler、Windows PATH の流入が無いことを確認するまで使用しない。dotfiles の image では `scripts/check-wsl-isolation.sh --force` で検査する。検査が失敗した場合や実行できない場合は Docker または Podman を使う。
 - host workspace の checkout を参照、変更、mount しない。USB device への書き込みや Unity など host application の利用が必要な場合は、目的、対象、操作を示して許可を得る。
 
 ## セキュリティと依存関係
