@@ -60,9 +60,12 @@
     # 無効化する。理由は同ファイルの冒頭を参照する。
     etc."codex/config.toml".source = ../etc/codex/config.toml;
 
-    # リポジトリの取得と direnv の利用に要るもののみ。他は開発シェルから取得する。
+    # リポジトリの取得と WSL の運用に必要なもののみ。開発ツールは開発シェルから取得する。
     systemPackages = [
       pkgs.git
+      # USB/IP がモジュールの WSL カーネルでは、usbipd が root で modprobe を呼ぶ。
+      # 開発シェル外から呼ばれるため system の PATH に配置する。
+      pkgs.kmod
     ];
   };
 
