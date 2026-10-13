@@ -78,10 +78,29 @@ COPY nix ./nix
 #
 # 末尾の rm は取得済み tarball の展開キャッシュの削除であり、store は変更しない。
 RUN nix develop ".#${DOTFILES_TOOLCHAIN_PROFILE}" --profile "$DOTFILES_PROFILE" --command true \
+  && nix build ".#${DOTFILES_TOOLCHAIN_PROFILE}" --out-link /opt/dotfiles \
   && nix flake archive --json > /dev/null \
   && nix registry add nixpkgs \
   "path:$(nix eval --raw --impure --expr '(builtins.getFlake "/workspace").inputs.nixpkgs.outPath')" \
   && rm -rf /root/.cache/nix
+
+# docker exec は ENTRYPOINT を通らない。Server と extension host からも選択した
+# toolchain と ELF の互換環境を利用できるよう、container 自体の環境に設定する。
+ENV PATH="/opt/dotfiles/bin:${PATH}"
+ENV NIX_LD=/opt/dotfiles/share/dotfiles/remote/ld
+ENV NIX_LD_LIBRARY_PATH=/opt/dotfiles/share/dotfiles/remote/lib
+RUN mkdir -p /lib /lib64 /usr/lib \
+  && case "$(uname -m)" in \
+       x86_64) ln -s /opt/dotfiles/share/dotfiles/remote/nix-ld /lib64/ld-linux-x86-64.so.2 ;; \
+       aarch64) ln -s /opt/dotfiles/share/dotfiles/remote/nix-ld /lib/ld-linux-aarch64.so.1 ;; \
+       *) exit 1 ;; \
+     esac \
+  && ln -s /opt/dotfiles/share/dotfiles/remote/lib/libc.so.6 /usr/lib/libc.so.6 \
+  && ln -s /opt/dotfiles/share/dotfiles/remote/lib/libstdc++.so.6 /usr/lib/libstdc++.so.6 \
+  && ln -sfn /opt/dotfiles/bin/bash /bin/bash \
+  && printf '%s\n' \
+  'export PATH="/opt/dotfiles/bin:$PATH"' \
+  '. /opt/dotfiles/share/dotfiles/environment' > /etc/profile
 
 # dotfiles 本体を配置する。実行時に -v "$PWD:/workspace" を指定した場合はマウントで
 # 上書きされる。マウントせずに実行することもできる。

@@ -46,8 +46,51 @@ let
       available = enabled && packageAvailable systems package;
     };
 
+  # VS Code Server と native extension が通常の Linux 向け ELF を実行するための環境。
+  # NixOS-WSL とコンテナで同じ固定済みライブラリを使用する。
+  remoteLibraries = [
+    pkgs.stdenv.cc.cc.lib
+    pkgs.zlib
+    pkgs.glibc
+  ];
+  remoteLibraryPath = pkgs.buildEnv {
+    name = "dotfiles-remote-libraries";
+    paths = map lib.getLib remoteLibraries;
+    pathsToLink = [ "/lib" ];
+  };
+  remoteRuntime =
+    pkgs.runCommand "dotfiles-remote-runtime"
+      {
+        meta.platforms = linuxSystems;
+      }
+      ''
+        mkdir -p "$out/share/dotfiles/remote"
+        ln -s ${pkgs.nix-ld}/libexec/nix-ld "$out/share/dotfiles/remote/nix-ld"
+        ln -s ${pkgs.stdenv.cc.bintools.dynamicLinker} "$out/share/dotfiles/remote/ld"
+        ln -s ${remoteLibraryPath}/lib "$out/share/dotfiles/remote/lib"
+      '';
+  remoteTools = [
+    (mkTool {
+      package = pkgs.curl;
+      commands = [ "curl" ];
+    })
+    (mkTool {
+      package = pkgs.wget;
+      commands = [ "wget" ];
+    })
+    (mkTool {
+      package = pkgs.procps;
+      commands = [ "ps" ];
+      systems = linuxSystems;
+    })
+    (mkTool {
+      package = remoteRuntime;
+      systems = linuxSystems;
+    })
+  ];
+
   groups = {
-    base = [
+    base = remoteTools ++ [
       # 基本ユーティリティ
       (mkTool { package = pkgs.coreutils; })
       (mkTool { package = pkgs.findutils; })
@@ -382,5 +425,7 @@ let
   allProfiles = lib.mapAttrs mkProfile profileDefinitions;
 in
 {
+  inherit remoteLibraries;
+  remotePackages = map (tool: tool.package) (lib.filter (tool: tool.available) remoteTools);
   profiles = lib.filterAttrs (_name: profile: profile.available) allProfiles;
 }

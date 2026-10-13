@@ -8,7 +8,15 @@
 # ホームディレクトリの内容は home-manager (nix/home.nix) が持つ。
 { pkgs, ... }:
 
+let
+  catalog = import ./packages.nix { inherit pkgs; };
+in
 {
+  # Remote-WSL が配布する Node.js を、Windows 側の mount や interop に依存せず実行する。
+  programs.nix-ld = {
+    enable = true;
+    libraries = catalog.remoteLibraries;
+  };
   wsl = {
     enable = true;
 
@@ -60,9 +68,12 @@
     # 無効化する。理由は同ファイルの冒頭を参照する。
     etc."codex/config.toml".source = ../etc/codex/config.toml;
 
-    # リポジトリの取得と direnv の利用に要るもののみ。他は開発シェルから取得する。
-    systemPackages = [
+    # リポジトリの取得と WSL の運用に必要なもののみ。開発ツールは開発シェルから取得する。
+    systemPackages = catalog.remotePackages ++ [
       pkgs.git
+      # USB/IP がモジュールの WSL カーネルでは、usbipd が root で modprobe を呼ぶ。
+      # 開発シェル外から呼ばれるため system の PATH に配置する。
+      pkgs.kmod
     ];
   };
 

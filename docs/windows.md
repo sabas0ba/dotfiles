@@ -75,6 +75,20 @@ sudo にパスワードを設けないのは、WSL では `wsl.exe -u root` で�
 
 `/mnt` の下にドライブ文字のディレクトリ (`/mnt/c` 等) が空のまま残ることがある。登録の直後、隔離が成立する前に WSL が作ったもので、マウントはされていない。
 
+## USB/IP のカーネルモジュール
+
+USB/IP がモジュールとして提供される WSL カーネルでは、`usbipd attach` が WSL 内で
+`modprobe vhci_hcd` を実行する。NixOS-WSL の system 構成に `kmod` を含め、開発シェルに
+入っていない root からも `modprobe` を利用できるようにしている。
+
+カーネル更新後に attach が失敗した場合は、対象 distro の root で `command -v modprobe`
+と `uname -r` を確認し、`/lib/modules/<カーネル版>` に対応するモジュールがあることを
+確認する。`modprobe --dry-run --verbose vhci_hcd` でロード対象を確認できる。
+カーネルとモジュールの版が一致しない場合は、`kmod` の追加だけでは解決しない。
+
+既存環境には `make wsl-dry` で適用内容を確認してから `make wsl-switch` で反映する。
+USB デバイスの接続先は Windows 側の `usbipd` で指定する。
+
 ## 改変版を併存させる
 
 同じ環境の改変版を、別のディストリビューションとして登録できる。登録名に加えて、リポジトリとその中で参照する対象を分ける。
