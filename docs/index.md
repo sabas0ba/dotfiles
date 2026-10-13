@@ -8,6 +8,7 @@ Nix と direnv による再現性のある開発環境。同じ定義からコ�
 
 - [セットアップ](setup.md) — Nix の導入から開発シェルに入るまで
 - [Windows (WSL)](windows.md) — WSL 内に環境を構築する
+- [VS Code Remote](vscode.md) — WSL とコンテナへ接続する
 - [使い方](usage.md) — 日常の操作、ホームディレクトリの構成、コンテナ環境
 - [再現性](reproducibility.md) — 外部の成果物をどう固定し、どう検査するか
 - [開発](development.md) — 本リポジトリを変更する際の手順と規約
