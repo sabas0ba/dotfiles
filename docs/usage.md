@@ -82,8 +82,11 @@ make hm-switch  # 配置の実行
 | `sabas0ba` | `/home/sabas0ba` (導出) | 個人環境 |
 | `nixos` | `/home/nixos` (導出) | [WSL 上の環境](windows.md) |
 | `root` | `/root` (明示) | Claude Code のリモート実行環境 |
+| `agent` | `/home/agent` (明示) | [tidyy](https://github.com/sabas0ba/tidyy) の sandbox コンテナ内で agent を動かす利用者 |
 
 `nixos` は NixOS-WSL の `wsl.defaultUser` の既定値である。改名すると初回の `nixos-rebuild` が終わるまで対象が存在しないことになるため、既定値のまま使う。
+
+`agent` は tidyy がコンテナに接続する `HOME` (`/home/agent`) に対応する。コンテナ内の利用者は host の実行ユーザと同じ uid であり passwd の項目を持たないため、名前は利用者名ではなく役割を表す。コンテナ内では `USER` が設定されないため、適用時は `make hm-switch HM_TARGET=agent` のように対象を明示する。tidyy の image にこの構成を取り込む手順は tidyy 側 (環境 builder) で定める。
 
 Claude Code のリモート実行環境では `~/.gitconfig` をセッション側が管理している。home-manager が生成するのは `~/.config/git/config` なのでファイルの衝突は起きないが、git は `~/.gitconfig` を後に読むため、user の設定は当該環境ではセッション側が優先される。
 
