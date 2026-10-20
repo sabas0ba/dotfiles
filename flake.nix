@@ -161,6 +161,16 @@
           system = "x86_64-linux";
           homeDirectory = "/root";
         };
+
+        # tidyy (sabas0ba/tidyy) の sandbox コンテナ内で agent を動かす利用者。
+        # コンテナ内の uid は host の実行ユーザと同じであり passwd の項目を持たないため、
+        # 名前は利用者名ではなく役割を表す。ホームは tidyy が /home/agent に volume を
+        # 接続する前提であり、名前から導出される値と一致するが、tidyy 側の定数との対応を
+        # 示すため明示する。
+        agent = {
+          system = "x86_64-linux";
+          homeDirectory = "/home/agent";
+        };
       };
 
       mkHomeConfiguration =
