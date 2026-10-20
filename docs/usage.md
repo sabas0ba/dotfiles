@@ -98,7 +98,7 @@ tidyy new -s work --provider podman --base <image> --home-files result/home-file
 この経路の制約を次に示す。
 
 - 複製するのは `home-files` だけである。`home-path` (`hm-session-vars.sh` を含む profile) は複製しないため、`home.sessionVariables` はコンテナ内で設定されない。Claude Code の telemetry 無効化は `~/.claude/settings.json` の `env` で適用され、Codex の `/etc/codex/config.toml` は system 層のため image 側で配置する。
-- `--home-files` は session の作成時だけ作用し、volume が空でない場合は既存の状態を守るため失敗する。構成を更新する場合は volume を削除して session を作り直す。
+- `--home-files` は session の作成時だけ作用し、volume が空でない場合は既存の状態を守るため失敗する。構成を更新する場合は volume を削除して session を作り直す。volume には agent の認証状態や会話履歴も含まれるため、削除前に必要な状態を退避し、新しい volume へ移す。
 - コンテナ内で `make hm-switch HM_TARGET=agent` を実行する経路は、image に nix と本リポジトリを入れる必要があり、現時点では採らない。
 
 Claude Code のリモート実行環境では `~/.gitconfig` をセッション側が管理している。home-manager が生成するのは `~/.config/git/config` なのでファイルの衝突は起きないが、git は `~/.gitconfig` を後に読むため、user の設定は当該環境ではセッション側が優先される。
