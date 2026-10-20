@@ -86,7 +86,20 @@ make hm-switch  # 配置の実行
 
 `nixos` は NixOS-WSL の `wsl.defaultUser` の既定値である。改名すると初回の `nixos-rebuild` が終わるまで対象が存在しないことになるため、既定値のまま使う。
 
-`agent` は tidyy がコンテナに接続する `HOME` (`/home/agent`) に対応する。コンテナ内の利用者は host の実行ユーザと同じ uid であり passwd の項目を持たないため、名前は利用者名ではなく役割を表す。コンテナ内では `USER` が設定されないため、適用時は `make hm-switch HM_TARGET=agent` のように対象を明示する。tidyy の image にこの構成を取り込む手順は tidyy 側 (環境 builder) で定める。
+`agent` は tidyy がコンテナに接続する `HOME` (`/home/agent`) に対応する。コンテナ内の利用者は host の実行ユーザと同じ uid であり passwd の項目を持たないため、名前は利用者名ではなく役割を表す。
+
+導入経路は tidyy の `--home-files` とする。host で activation package をビルドし、その `home-files` (store への symlink からなるホームの木) を session の作成時に `HOME` の volume へ複製する。複製は symlink を実体のファイルに展開し、所有者は host の実行ユーザ、権限はディレクトリ `0700`、ファイル `0600` になる。コンテナ内で home-manager の activation を実行しないため、passwd の項目や `USER`、nix store はコンテナに不要である。
+
+```bash
+nix build .#homeConfigurations.agent.activationPackage
+tidyy new -s work --provider podman --base <image> --home-files result/home-files -- claude
+```
+
+この経路の制約を次に示す。
+
+- 複製するのは `home-files` だけである。`home-path` (`hm-session-vars.sh` を含む profile) は複製しないため、`home.sessionVariables` はコンテナ内で設定されない。Claude Code の telemetry 無効化は `~/.claude/settings.json` の `env` で適用され、Codex の `/etc/codex/config.toml` は system 層のため image 側で配置する。
+- `--home-files` は session の作成時だけ作用し、volume が空でない場合は既存の状態を守るため失敗する。構成を更新する場合は volume を削除して session を作り直す。
+- コンテナ内で `make hm-switch HM_TARGET=agent` を実行する経路は、image に nix と本リポジトリを入れる必要があり、現時点では採らない。
 
 Claude Code のリモート実行環境では `~/.gitconfig` をセッション側が管理している。home-manager が生成するのは `~/.config/git/config` なのでファイルの衝突は起きないが、git は `~/.gitconfig` を後に読むため、user の設定は当該環境ではセッション側が優先される。
 
