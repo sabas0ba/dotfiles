@@ -33,15 +33,17 @@ codex_home=$work/codex
 note() {
   :
 }
-mkdir -p "$repo/home/.claude" "$repo/home/.codex" "$home/.claude" "$codex_home"
+mkdir -p "$repo/home/.claude" "$repo/home/.codex" "$repo/home/.gemini" "$home/.claude" "$codex_home"
 printf 'managed-claude\n' >"$repo/home/.claude/settings.json"
 printf 'managed-codex-v1\n' >"$repo/home/.codex/AGENTS.md"
+printf 'managed-gemini\n' >"$repo/home/.gemini/AGENTS.md"
 printf 'original-codex\n' >"$codex_home/AGENTS.md"
 
 dotfiles_install_home "$repo" "$home" "$codex_home"
 
 cmp -s "$repo/home/.claude/settings.json" "$home/.claude/settings.json"
 cmp -s "$repo/home/.codex/AGENTS.md" "$codex_home/AGENTS.md"
+cmp -s "$repo/home/.gemini/AGENTS.md" "$home/.gemini/AGENTS.md"
 grep -qxF 'original-codex' "$codex_home/AGENTS.md.dotfiles-backup"
 if [ -e "$home/.codex/AGENTS.md" ]; then
   echo "CODEX_HOME 指定時に HOME/.codex へ配置されました。" >&2
