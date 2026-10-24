@@ -124,7 +124,6 @@ Antigravity CLI の `~/.gemini/antigravity-cli/settings.json` および共通設
 ```json
 {
   "allowNonWorkspaceAccess": false,
-  "enableTelemetry": false,
   "showFeedbackSurvey": false,
   "toolPermission": "request-review",
   "permissions": {
@@ -253,36 +252,19 @@ Antigravity (CLI / Antigravity 2.0 / Antigravity IDE / VS Code 拡張) の設定
 
 | 対象 | 設定箇所 | 設定内容 |
 | --- | --- | --- |
-| Google アカウント / Language Server | アカウント同期設定 (`userStatus`) | Antigravity 2.0 / IDE の `Settings (Ctrl+,) > Account > General` または CLI の `/config` で `Enable Telemetry` を無効化する (`"disableTelemetry": true`) |
-| Antigravity CLI (`agy`) | `~/.gemini/antigravity-cli/settings.json` | `"enableTelemetry": false`、`"showFeedbackSurvey": false` |
-| Antigravity IDE (ユーザー設定) | `Antigravity IDE/User/settings.json` (Linux: `~/.config/`、macOS: `~/Library/Application Support/`、Windows: `%APPDATA%\`) | 下記 JSON の 5 項目 |
-| Antigravity IDE (起動引数) | `~/.antigravity-ide/argv.json` | `"disable-telemetry": true`、`"enable-crash-reporter": false` |
-| VS Code (本体・拡張機能) | `Code/User/settings.json` | Antigravity IDE のユーザー設定と同じ 5 項目 |
+| Antigravity App / IDE | Settings の Account | `Enable Telemetry` を無効化する |
+| Antigravity CLI (`agy`) | `/config` | `Enable Telemetry` を無効化する。選択はアカウントに保存される |
+| Antigravity CLI のアンケート表示 | `~/.gemini/antigravity-cli/settings.json` | 任意で `"showFeedbackSurvey": false` を設定する。telemetry 無効化とは別の設定 |
 
-Antigravity IDE および VS Code の `User/settings.json` には次を設定する。
+2026-10-24 に確認した [公式 Settings](https://antigravity.google/docs/settings) と [CLI settings schema](https://antigravity.google/schemas/v1/settings.json) に基づく。`enableTelemetry` は `settings.json` から読み取られず、CLI の保存時に削除されるため、同ファイルに `false` を記載しても無効化できない。設定後に `/config` または Account を開き直し、無効になっていることを確認する。
 
-```json
-{
-  "telemetry.telemetryLevel": "off",
-  "telemetry.enableTelemetry": false,
-  "telemetry.enableCrashReporter": false,
-  "telemetry.feedback.enabled": false,
-  "antigravity.enableTelemetry": false
-}
-```
-
-Antigravity IDE の `~/.antigravity-ide/argv.json` には次を設定する。
-
-```json
-{
-  "enable-crash-reporter": false,
-  "disable-telemetry": true
-}
-```
+検証範囲は公式資料との照合に限る。実機で確認したクライアントのバージョン、および通信の停止確認は未記録である。IDE / VS Code 拡張の `antigravity.enableTelemetry`、IDE 固有の `User/settings.json` と `argv.json` の配置先・有効性は確認できていないため、無効化手順には含めない。VS Code 本体の telemetry と Antigravity のアカウント側の収集は区別し、本体の設定だけで拡張機能の収集も停止したとはみなさない。
 
 ### Agent の作業規約
 
 `home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で、`home/.gemini/AGENTS.md` は Antigravity が `@[label](path)` include で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
+
+Antigravity の入口と include 構文は [公式 Rules](https://antigravity.google/docs/rules/) に従う。home-manager では `~/.codex/AGENTS.md` を参照する。Cloud Setup の `--setup-script` 経路では `CODEX_HOME` を変更できるため、Antigravity の入口を配置する際に原本の本文を展開し、配置先のパスに依存しないようにする。生成済みの入口は手編集せず、原本の更新後に Cloud Setup を再実行する。`make check` は実際の入口を用いて、共通規約の展開、再配置時の更新、初回 backup の保持を検査する。
 
 `home/.codex` および `home/.gemini` もファイル単位で配置するため、各ツールが同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む user 層の設定 (`${CODEX_HOME}/config.toml`、`~/.gemini/antigravity-cli/settings.json`、`~/.gemini/config/config.json`) は本リポジトリでは配布しない。Codex の telemetry 無効化だけを system 層に置く ([Codex CLI](#codex-cli))。
 
