@@ -189,3 +189,4 @@ docker-smoke: docker-build ## コンテナ内で環境の軽量スモークテ�
 .PHONY: docker-check
 docker-check: docker-build ## CI 同等の全検査をオフラインのコンテナ内で実行する
 	$(DOCKER_RUN_OFFLINE) make check
+	docker run --rm --network none --entrypoint /bin/bash $(DOCKER_IMAGE) scripts/check-container-remote.sh

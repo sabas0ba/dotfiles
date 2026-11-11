@@ -166,7 +166,7 @@ in
   # hook や permission の JSON が壊れると設定全体が読み込まれない。
   # jq に複数ファイルを渡すと -e は最後の出力しか見ないため、1 ファイルずつ検査する。
   settings-json = mkCheck "settings-json" [ pkgs.jq ] ''
-    for settings in .claude/settings.json home/.claude/settings.json; do
+    for settings in .claude/settings.json home/.claude/settings.json .devcontainer/devcontainer.json; do
       jq -e 'type == "object"' "$settings" >/dev/null
     done
   '';

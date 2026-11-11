@@ -27,6 +27,8 @@ nav:
     url: /setup.html
   - title: Windows (WSL)
     url: /windows.html
+  - title: VS Code Remote
+    url: /vscode.html
   - title: 使い方
     url: /usage.html
   - title: 再現性

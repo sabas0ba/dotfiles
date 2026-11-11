@@ -1,0 +1,22 @@
+{
+  "name": "dotfiles (Nix)",
+  "build": {
+    "dockerfile": "../Dockerfile",
+    "context": "..",
+    "args": {
+      "DOTFILES_TOOLCHAIN_PROFILE": "default"
+    }
+  },
+  "workspaceMount": "source=dotfiles-vscode-workspaces,target=/workspaces,type=volume",
+  "workspaceFolder": "/workspaces",
+  "remoteUser": "root",
+  "overrideCommand": true,
+  "userEnvProbe": "loginInteractiveShell",
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash"
+      }
+    }
+  }
+}
