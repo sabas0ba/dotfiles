@@ -61,7 +61,7 @@ export PATH="$out/bin:$PATH"
 ホームディレクトリの内容は home-manager で宣言的に管理する。管理対象は 2 種類ある。
 
 - 設定の生成: [`nix/home.nix`](https://github.com/sabas0ba/dotfiles/blob/main/nix/home.nix) の `programs.git` 等。git の user/email もここで設定する
-- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する (`home/.codex/AGENTS.md` → `~/.codex/AGENTS.md`、`home/.claude/CLAUDE.md` → `~/.claude/CLAUDE.md`)
+- 生ファイルの配置: `home/` 以下がホームディレクトリの構造に対応する (`home/.codex/AGENTS.md` → `~/.codex/AGENTS.md`、`home/.claude/CLAUDE.md` → `~/.claude/CLAUDE.md`、`home/.gemini/AGENTS.md` → `~/.gemini/AGENTS.md`)
 
 既存ファイルを置き換える可能性があるため、必ず先に配置内容を確認する。
 
@@ -113,9 +113,73 @@ Claude Code のリモート実行環境では `~/.gitconfig` をセッション�
 
 配置されたファイルは Nix store への symlink であり書き込めない。プロジェクト側で緩める場合は当該リポジトリの `.claude/settings.json` を使う (プロジェクトの設定が優先される)。
 
+### Antigravity の設定
+
+`home/.gemini` も `recursive = true` で配置し、`~/.gemini` 内の認証情報や状態ファイルを置き換えずに `home/.gemini/AGENTS.md` だけを配置する。
+
+Antigravity CLI の `~/.gemini/antigravity-cli/settings.json` および共通設定の `~/.gemini/config/config.json` は、モデル選択や `/config`・`/permissions` の操作時に Antigravity 自身が書き換えるファイルであり、ホスト固有の値も含む。読み取り専用の symlink で配置する home-manager の対象にすると設定変更の保存が失敗するため、本リポジトリでは配布しない。
+
+手元の環境で `home/.claude/settings.json` と同等の補助検査を設定する場合は、`~/.gemini/antigravity-cli/settings.json` に次を設定する。
+
+```json
+{
+  "allowNonWorkspaceAccess": false,
+  "showFeedbackSurvey": false,
+  "toolPermission": "request-review",
+  "permissions": {
+    "deny": [
+      "read_file(/mnt/)",
+      "read_file(~/.ssh/)",
+      "read_file(~/.gnupg/)",
+      "read_file(~/.aws/)",
+      "read_file(~/.azure/)",
+      "read_file(~/.config/gcloud/)",
+      "read_file(~/.config/gh/)",
+      "read_file(~/.kube/)",
+      "read_file(~/.docker/config.json)",
+      "read_file(~/.netrc)",
+      "read_file(~/.npmrc)",
+      "read_file(~/.pypirc)",
+      "read_file(~/.git-credentials)",
+      "read_file(.env)"
+    ],
+    "ask": [
+      "command(sudo)",
+      "command(gh)",
+      "command(az)",
+      "command(aws)",
+      "command(gcloud)",
+      "command(kubectl)",
+      "command(docker)",
+      "command(podman)",
+      "command(ssh)",
+      "command(scp)",
+      "command(rsync)",
+      "command(wsl.exe)",
+      "command(cmd.exe)",
+      "command(powershell.exe)",
+      "command(pwsh.exe)"
+    ]
+  }
+}
+```
+
+2026-10-24 に確認した [Agent permissions](https://antigravity.google/docs/permissions?tab=cli) と [CLI settings schema](https://antigravity.google/schemas/v1/settings.json) に基づく。上記の設定には次の制約がある。
+
+- `allowNonWorkspaceAccess: false` と `toolPermission: "request-review"` は既定値である。`/config` で変更された場合に設定ファイル上で差分として確認できるよう明記している
+- `read_file` の対象は「絶対パス、または workspace root からの相対パス」と記載されており、`~` の展開は記載がない。`~` を含む deny が有効である保証はないため、`/home/<user>/.ssh/` のような絶対パスも併記する。本ファイルは配布しないため、ホスト固有のパスを記載してよい
+- ディレクトリを指定した規則は配下に再帰的に適用される。`**` などの glob は記載がないため、`read_file(.env)` は workspace root 直下の `.env` だけを対象とし、`home/.claude/settings.json` の `Read(//**/.env)` および `Read(//**/.env.*)` と同等にはならない
+- `command(...)` は先頭の token から前方一致で照合し、パイプや `&&` で連結したコマンドは要素ごとに照合する。`$(...)` などを含む行では前方一致が無効になる
+- 規則が shell から起動した child process や `cat` による読み取りに及ぶかは記載がない。Claude Code と同様に OS level の強制とはみなさない
+
+より強い制限が必要な場合は次を検討する。
+
+- `toolPermission: "strict"`: ファイルの読み取りを含むすべての操作の前に確認する
+- `enableTerminalSandbox: true`: agent が起動する terminal command を OS の container 内で実行する。Windows 10、古い Windows 11、一部の Linux host や container では効果がなく、`/config` に表示されない。WSL での有効性は未確認である
+
 ### Telemetry の無効化
 
-Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI の telemetry およびデータ収集を無効化する。Codex 以外は環境変数で、Codex は環境変数で制御できないため system 層の `config.toml` で扱う。
+Claude Code、GitHub CLI、GitHub Copilot CLI、Codex CLI、Antigravity の telemetry およびデータ収集を無効化する。環境変数で制御できるものは `nix/telemetry.nix` で、Codex は system 層の `config.toml` で、Antigravity は各クライアントの設定で扱う。
 
 #### 環境変数
 
@@ -196,11 +260,27 @@ GitHub Copilot CLI は telemetry だけを無効化する公開設定を持た�
 
 値は `make check` の `codex-telemetry` が検査する。
 
+#### Antigravity
+
+Antigravity (CLI / Antigravity 2.0 / Antigravity IDE / VS Code 拡張) の設定ファイルはクライアント自身が書き込む user 層にあるため、home-manager の管理対象には置かず、環境ごとに次を設定する。設定変更後は稼働中の CLI やアプリケーションを再起動して全プロセスに反映する。
+
+| 対象 | 設定箇所 | 設定内容 |
+| --- | --- | --- |
+| Antigravity App / IDE | Settings の Account | `Enable Telemetry` を無効化する |
+| Antigravity CLI (`agy`) | `/config` | `Enable Telemetry` を無効化する。選択はアカウントに保存される |
+| Antigravity CLI のアンケート表示 | `~/.gemini/antigravity-cli/settings.json` | 任意で `"showFeedbackSurvey": false` を設定する。telemetry 無効化とは別の設定 |
+
+2026-10-24 に確認した [公式 Settings](https://antigravity.google/docs/settings) と [CLI settings schema](https://antigravity.google/schemas/v1/settings.json) に基づく。`enableTelemetry` は `settings.json` から読み取られず、CLI の保存時に削除されるため、同ファイルに `false` を記載しても無効化できない。設定後に `/config` または Account を開き直し、無効になっていることを確認する。
+
+検証範囲は公式資料との照合に限る。実機で確認したクライアントのバージョン、および通信の停止確認は未記録である。IDE / VS Code 拡張の `antigravity.enableTelemetry`、IDE 固有の `User/settings.json` と `argv.json` の配置先・有効性は確認できていないため、無効化手順には含めない。VS Code 本体の telemetry と Antigravity のアカウント側の収集は区別し、本体の設定だけで拡張機能の収集も停止したとはみなさない。
+
 ### Agent の作業規約
 
-`home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
+`home/.codex/AGENTS.md` は利用者共通の作業規約の原本である。`home/.claude/CLAUDE.md` は Claude Code が `@path` import で、`home/.gemini/AGENTS.md` は Antigravity が `@[label](path)` include で同じ規約を読み込むための互換入口とし、共通規約を複製しない。本リポジトリの `AGENTS.md` はリポジトリ固有の規約と検証手順を追加する。これらには秘密情報やマシン固有の値を記載しない。
 
-`home/.codex` もファイル単位で配置するため、Codex が同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む user 層の `config.toml` は本リポジトリでは配布しない。telemetry の無効化だけを system 層に置く ([Codex CLI](#codex-cli))。
+Antigravity の入口と include 構文は [公式 Rules](https://antigravity.google/docs/rules/) に従う。home-manager では `~/.codex/AGENTS.md` を参照する。Cloud Setup の `--setup-script` 経路では `CODEX_HOME` を変更できるため、Antigravity の入口を配置する際に原本の本文を展開し、配置先のパスに依存しないようにする。生成済みの入口は手編集せず、原本の更新後に Cloud Setup を再実行する。`make check` は実際の入口を用いて、共通規約の展開、再配置時の更新、初回 backup の保持、および展開後のサイズが Antigravity の規則ファイルの上限 (24,000 bytes) 以下であることを検査する。上限を超えた部分は切り詰められるため、共通規約を拡充する際は同検査の結果を確認する。
+
+`home/.codex` および `home/.gemini` もファイル単位で配置するため、各ツールが同じディレクトリに作成する認証情報や状態ファイルを置き換えない。認証情報や実行環境ごとの差異を含む user 層の設定 (`${CODEX_HOME}/config.toml`、`~/.gemini/antigravity-cli/settings.json`、`~/.gemini/config/config.json`) は本リポジトリでは配布しない。Codex の telemetry 無効化だけを system 層に置く ([Codex CLI](#codex-cli))。
 
 ## コンテナ環境
 

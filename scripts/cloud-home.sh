@@ -47,11 +47,28 @@ dotfiles_install_home() {
   local repo=$1
   local home=$2
   local codex_home=$3
-  local source target
+  local source target tmp line
 
   while IFS= read -r source; do
     target=$(dotfiles_home_target "$repo" "$home" "$codex_home" "$source")
-    dotfiles_install_file "$source" "$target" "$home"
+    if [ "$source" = "$repo/home/.gemini/AGENTS.md" ]; then
+      # CODEX_HOME の配置先に依存しないよう、共通規約を配置時に展開する。
+      # パスを Markdown へ埋め込まないため、空白や括弧を含む HOME でも同じ内容になる。
+      mkdir -p "$(dirname "$target")"
+      tmp=$(mktemp -d "$target.dotfiles-tmp.XXXXXX")
+      while IFS= read -r line || [ -n "$line" ]; do
+        if [ "$line" = '@[~/.codex/AGENTS.md](~/.codex/AGENTS.md)' ]; then
+          cat "$repo/home/.codex/AGENTS.md"
+          printf '\n'
+        else
+          printf '%s\n' "$line"
+        fi
+      done <"$source" >"$tmp/AGENTS.md"
+      dotfiles_install_file "$tmp/AGENTS.md" "$target" "$home"
+      rm -rf "$tmp"
+    else
+      dotfiles_install_file "$source" "$target" "$home"
+    fi
   done < <(find "$repo/home" -type f)
 }
 

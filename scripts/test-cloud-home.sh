@@ -33,15 +33,22 @@ codex_home=$work/codex
 note() {
   :
 }
-mkdir -p "$repo/home/.claude" "$repo/home/.codex" "$home/.claude" "$codex_home"
+mkdir -p "$repo/home/.claude" "$repo/home/.codex" "$repo/home/.gemini" "$home/.claude" "$codex_home"
 printf 'managed-claude\n' >"$repo/home/.claude/settings.json"
 printf 'managed-codex-v1\n' >"$repo/home/.codex/AGENTS.md"
+cp "$root/home/.gemini/AGENTS.md" "$repo/home/.gemini/AGENTS.md"
 printf 'original-codex\n' >"$codex_home/AGENTS.md"
 
 dotfiles_install_home "$repo" "$home" "$codex_home"
 
 cmp -s "$repo/home/.claude/settings.json" "$home/.claude/settings.json"
 cmp -s "$repo/home/.codex/AGENTS.md" "$codex_home/AGENTS.md"
+grep -qxF 'managed-codex-v1' "$home/.gemini/AGENTS.md"
+if grep -qF '@[~/.codex/AGENTS.md](~/.codex/AGENTS.md)' "$home/.gemini/AGENTS.md"; then
+  echo "Antigravity の共通規約参照が展開されていません。" >&2
+  exit 1
+fi
+cp "$home/.gemini/AGENTS.md" "$work/original-gemini.md"
 grep -qxF 'original-codex' "$codex_home/AGENTS.md.dotfiles-backup"
 if [ -e "$home/.codex/AGENTS.md" ]; then
   echo "CODEX_HOME 指定時に HOME/.codex へ配置されました。" >&2
@@ -53,12 +60,37 @@ printf 'managed-codex-v2\n' >"$repo/home/.codex/AGENTS.md"
 dotfiles_install_home "$repo" "$home" "$codex_home"
 grep -qxF 'original-codex' "$codex_home/AGENTS.md.dotfiles-backup"
 grep -qxF 'managed-codex-v2' "$codex_home/AGENTS.md"
+grep -qxF 'managed-codex-v2' "$home/.gemini/AGENTS.md"
+cmp -s "$work/original-gemini.md" "$home/.gemini/AGENTS.md.dotfiles-backup"
+dotfiles_install_home "$repo" "$home" "$codex_home"
+cmp -s "$work/original-gemini.md" "$home/.gemini/AGENTS.md.dotfiles-backup"
 
 # CODEX_HOME が無い場合の呼び出し側は HOME/.codex を渡す。
 fallback_home=$work/fallback-home
 mkdir -p "$fallback_home"
 dotfiles_install_home "$repo" "$fallback_home" "$fallback_home/.codex"
 cmp -s "$repo/home/.codex/AGENTS.md" "$fallback_home/.codex/AGENTS.md"
+grep -qxF 'managed-codex-v2' "$fallback_home/.gemini/AGENTS.md"
+
+# パス文字列の埋め込みに依存せず、既存の認証・状態ファイルも保持する。
+special_home="$work/home with (parentheses)"
+mkdir -p "$special_home/.gemini"
+printf 'keep-state\n' >"$special_home/.gemini/state.json"
+dotfiles_install_home "$repo" "$special_home" "$work/codex with (parentheses)"
+grep -qxF 'managed-codex-v2' "$special_home/.gemini/AGENTS.md"
+grep -qxF 'keep-state' "$special_home/.gemini/state.json"
+
+# Antigravity は include の展開後に 24,000 bytes を超える規則ファイルを切り詰める
+# (https://antigravity.google/docs/rules/)。home-manager の配置でも include 先は同じ
+# 共通規約であるため、実際の入口と共通規約を展開した結果で上限を検査する。
+rules_limit=24000
+rules_home=$work/rules-home
+dotfiles_install_home "$root" "$rules_home" "$rules_home/.codex"
+rules_size=$(wc -c <"$rules_home/.gemini/AGENTS.md")
+if [ "$rules_size" -gt "$rules_limit" ]; then
+  echo "Antigravity の入口が展開後に ${rules_size} bytes で、上限 ${rules_limit} bytes を超えています。" >&2
+  exit 1
+fi
 
 # Codex の system config は既存の管理外 key を保持し、dotfiles 側の key を優先する。
 # 最初の既存内容は再実行しても backup として保持する。
